@@ -9,7 +9,7 @@ import { api, getProjectId, onProjectChange, LEAD_STATUSES, type CallOutcome, ty
 import { LogCallForm } from "@/components/log-call";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Calendar, Download, Eye, FileSpreadsheet, FileText, Filter, Pencil, PhoneCall, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, Calendar, Eye, FileSpreadsheet, FileText, Filter, Pencil, PhoneCall, Plus, Search, Trash2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
