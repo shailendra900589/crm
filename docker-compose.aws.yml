@@ -1,0 +1,45 @@
+# AWS override: use Amazon RDS instead of the bundled Postgres container.
+# Usage:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.aws.yml --env-file .env.prod up -d --build
+#
+# Required in .env.prod:
+#   POSTGRES_HOST=<rds-endpoint>
+#   POSTGRES_PORT=5432
+#   POSTGRES_DB=crm_db
+#   POSTGRES_USER=crm
+#   POSTGRES_PASSWORD=<rds-password>
+
+services:
+  # Do not start local Postgres when using RDS
+  postgres:
+    profiles: ["disabled-bundled-postgres"]
+
+  backend:
+    environment:
+      USE_POSTGRES: "1"
+      POSTGRES_HOST: ${POSTGRES_HOST:?Set POSTGRES_HOST to your RDS endpoint}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-crm_db}
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  celery-worker:
+    environment:
+      USE_POSTGRES: "1"
+      POSTGRES_HOST: ${POSTGRES_HOST:?Set POSTGRES_HOST to your RDS endpoint}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-crm_db}
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+
+  celery-beat:
+    environment:
+      USE_POSTGRES: "1"
+      POSTGRES_HOST: ${POSTGRES_HOST:?Set POSTGRES_HOST to your RDS endpoint}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-crm_db}
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}

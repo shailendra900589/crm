@@ -43,9 +43,11 @@ services:
       - .env.prod
     environment:
       USE_POSTGRES: "1"
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      REDIS_URL: redis://redis:6379/0
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-crm_db}
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_ALWAYS_EAGER: "0"
       DEBUG: "False"
       RUN_SEED: ${RUN_SEED:-0}
@@ -74,9 +76,11 @@ services:
       - .env.prod
     environment:
       USE_POSTGRES: "1"
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      REDIS_URL: redis://redis:6379/0
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-crm_db}
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_ALWAYS_EAGER: "0"
       DEBUG: "False"
     volumes:
@@ -96,9 +100,11 @@ services:
       - .env.prod
     environment:
       USE_POSTGRES: "1"
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      REDIS_URL: redis://redis:6379/0
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-crm_db}
+      POSTGRES_USER: ${POSTGRES_USER:-crm}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_ALWAYS_EAGER: "0"
       DEBUG: "False"
     depends_on:
