@@ -231,15 +231,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <FolderKanban className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-white/90" />
                 </label>
               )}
-              <button
-                type="button"
-                onClick={logout}
-                aria-label="Logout"
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300"
-              >
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">Logout</span>
-              </button>
             </div>
           </div>
         </header>
