@@ -140,7 +140,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </select>
           )}
         </div>
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
           {NAV.filter((n) => !n.roles || (user && n.roles.includes(user.role))).map((item) => {
             const Icon = item.icon;
             const active = item.href === "/admin" || item.href === "/dashboard"
@@ -164,7 +164,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="border-t border-slate-200 p-4 dark:border-slate-800">
+        <div className="shrink-0 border-t border-slate-200 p-4 dark:border-slate-800">
           <UserBadge user={user} />
           <button
             type="button"
@@ -175,8 +175,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
             {theme === "dark" ? "Light mode" : "Dark mode"}
           </button>
           <button
+            type="button"
             onClick={logout}
-            className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
           >
             <LogOut className="h-4 w-4" /> Logout
           </button>
@@ -213,7 +214,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </button>
               <NotificationsBell />
               {projects && projects.filter((p) => p.is_active).length > 0 && (
-                <label className="relative flex shrink-0 items-center">
+                <label className="relative hidden shrink-0 items-center sm:flex">
                   <span className="sr-only">Switch project</span>
                   <select
                     value={activeProject}
@@ -230,6 +231,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <FolderKanban className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-white/90" />
                 </label>
               )}
+              <button
+                type="button"
+                onClick={logout}
+                aria-label="Logout"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-100 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300"
+              >
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
             </div>
           </div>
         </header>

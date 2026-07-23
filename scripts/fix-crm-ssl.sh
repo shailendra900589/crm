@@ -11,6 +11,7 @@ git pull --ff-only || true
 
 DOMAIN=crm.trackbook.co
 LIVE=/etc/letsencrypt/live/${DOMAIN}
+# Do NOT include www — DNS often has no www.crm record (NXDOMAIN breaks certbot)
 
 echo "=== 1) Ensure CRM app responds on :9080 ==="
 curl -fsS -H "Host: ${DOMAIN}" http://127.0.0.1:9080/api/health/ >/dev/null
@@ -30,7 +31,7 @@ upstream amazon_crm_docker {
 server {
     listen 80;
     listen [::]:80;
-    server_name crm.trackbook.co www.crm.trackbook.co;
+    server_name crm.trackbook.co;
     client_max_body_size 50M;
 
     location /.well-known/acme-challenge/ {
@@ -68,10 +69,10 @@ if sudo test -f "${LIVE}/fullchain.pem"; then
   echo "Cert already exists — renewing if due"
   sudo certbot renew --cert-name "${DOMAIN}" --non-interactive || true
 else
-  sudo certbot --nginx -d "${DOMAIN}" -d "www.${DOMAIN}" \
+  sudo certbot --nginx -d "${DOMAIN}" \
     --non-interactive --agree-tos --register-unsafely-without-email --redirect \
     || sudo certbot certonly --webroot -w /var/www/html \
-         -d "${DOMAIN}" -d "www.${DOMAIN}" \
+         -d "${DOMAIN}" \
          --non-interactive --agree-tos --register-unsafely-without-email
 fi
 
@@ -100,14 +101,14 @@ upstream amazon_crm_docker {
 server {
     listen 80;
     listen [::]:80;
-    server_name ${DOMAIN} www.${DOMAIN};
+    server_name ${DOMAIN};
     return 301 https://\$host\$request_uri;
 }
 
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name ${DOMAIN} www.${DOMAIN};
+    server_name ${DOMAIN};
 
     ssl_certificate     ${LIVE}/fullchain.pem;
     ssl_certificate_key ${LIVE}/privkey.pem;
