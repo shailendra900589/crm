@@ -1,5 +1,21 @@
 # Deploy Amazon Merchant CRM (production Docker stack)
 
+> **AWS + domain `crm.trackbook.co`:** follow **[AWS_DEPLOY.md](AWS_DEPLOY.md)** (recommended).
+
+## Same domain (frontend + backend)
+
+Use **one domain**: `https://crm.trackbook.co`
+
+- UI → `/`
+- API → `/api/`
+- WebSockets → `/ws/`
+
+Do **not** split into separate frontend/API domains for v1.
+
+## Database
+
+Production uses **PostgreSQL** (and Redis). **MongoDB is not used** by this codebase.
+
 ## What you get
 
 One-command stack on a single VM:
@@ -39,7 +55,7 @@ cp .env.prod.example .env.prod
 docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 # 4. Wait for healthy backend, then open
-#    http://YOUR_HOST/
+#    https://crm.trackbook.co
 ```
 
 Windows (PowerShell):
@@ -75,53 +91,29 @@ USE_HTTPS=1
 HTTP_PORT=80
 ```
 
-Point DNS `crm.trackbook.co` → your server IP. Put TLS in front (Cloudflare, Caddy, or host nginx) and terminate HTTPS there. Containers stay on HTTP internally; `USE_HTTPS=1` trusts `X-Forwarded-Proto`.
+Point DNS `crm.trackbook.co` → your EC2 Elastic IP. Prefer Cloudflare SSL in front of nginx `:80`. See **AWS_DEPLOY.md**.
 
 ---
 
 ## Useful commands
 
 ```bash
-# Status
 docker compose -f docker-compose.prod.yml --env-file .env.prod ps
-
-# Logs
 docker compose -f docker-compose.prod.yml --env-file .env.prod logs -f backend nginx
-
-# Health
 curl http://127.0.0.1/api/health/
-
-# Django shell / manage
 docker compose -f docker-compose.prod.yml --env-file .env.prod exec backend python manage.py createsuperuser
-
-# Stop
 docker compose -f docker-compose.prod.yml --env-file .env.prod down
-
-# Stop + wipe DB volumes (destructive)
-docker compose -f docker-compose.prod.yml --env-file .env.prod down -v
 ```
 
 ---
 
-## Local development (unchanged)
-
-Infra only (Postgres + Redis), run Django/Next on the host:
+## Local development
 
 ```powershell
 .\scripts\docker-dev.ps1
-```
-
-Backend + Celery in Docker (no nginx/frontend):
-
-```powershell
+# or full backend stack:
 .\scripts\docker-dev.ps1 -FullStack
 ```
-
----
-
-## Email / S3 (optional)
-
-Uncomment SMTP and/or `USE_S3=1` blocks in `.env.prod`. Without SMTP, digests print to Celery logs. Without S3, uploads stay in the `media_data` Docker volume.
 
 ---
 
@@ -129,9 +121,7 @@ Uncomment SMTP and/or `USE_S3=1` blocks in `.env.prod`. Without SMTP, digests pr
 
 - [ ] Strong `SECRET_KEY` and `POSTGRES_PASSWORD`
 - [ ] `DEBUG=False`
-- [ ] `ALLOWED_HOSTS` / `CORS_ALLOWED_ORIGINS` match your public URL
-- [ ] `RUN_SEED=0` after first seed (or create real users)
-- [ ] Change demo passwords if seed was used
-- [ ] `/api/health/` returns healthy DB + Redis
-- [ ] Login works; WebSocket pulse updates on dashboard
-- [ ] TLS enabled for production traffic
+- [ ] Domain + CORS match `https://crm.trackbook.co`
+- [ ] `RUN_SEED=0` after first seed; change demo passwords
+- [ ] `/api/health/` ok; login + WebSocket pulse work
+- [ ] TLS via Cloudflare (or ALB)
