@@ -1,0 +1,29 @@
+# Secrets — never commit
+.env
+.env.local
+.env.prod
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+CRM_Backend/media/
+CRM_Backend/staticfiles/
+CRM_Backend/db.sqlite3
+
+# Node
+CRM_Frontend/node_modules/
+CRM_Frontend/.next/
+node_modules/
+
+# Agent / local tooling
+agent-transcripts/
+.cursor/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

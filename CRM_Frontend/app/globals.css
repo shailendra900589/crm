@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #f8fafc;
+    --foreground: #0f172a;
+    --card: #ffffff;
+    --muted: #f1f5f9;
+    --border: #e2e8f0;
+  }
+  .dark {
+    --background: #020617;
+    --foreground: #f1f5f9;
+    --card: #0f172a;
+    --muted: #1e293b;
+    --border: #334155;
+    color-scheme: dark;
+  }
+  * {
+    @apply border-slate-200 dark:border-slate-700;
+  }
+  body {
+    @apply min-h-screen bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+  }
+}
+
+@layer components {
+  .crm-card {
+    @apply rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900;
+  }
+  .crm-input {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100;
+  }
+  .crm-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:opacity-50;
+  }
+  .crm-btn-primary {
+    @apply crm-btn bg-blue-600 text-white shadow-sm hover:bg-blue-700;
+  }
+  .crm-btn-outline {
+    @apply crm-btn border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+  }
+}
+
+/* Broad dark overrides so existing slate/white utilities work across modules */
+html.dark .bg-white { background-color: rgb(15 23 42) !important; }
+html.dark .bg-white\/80 { background-color: rgb(15 23 42 / 0.85) !important; }
+html.dark .bg-slate-50 { background-color: rgb(2 6 23) !important; }
+html.dark .bg-slate-50\/50 { background-color: rgb(15 23 42 / 0.5) !important; }
+html.dark .bg-slate-100 { background-color: rgb(30 41 59) !important; }
+html.dark .bg-slate-100\/80 { background-color: rgb(30 41 59 / 0.8) !important; }
+html.dark .hover\:bg-slate-50:hover { background-color: rgb(30 41 59) !important; }
+html.dark .hover\:bg-slate-100:hover { background-color: rgb(51 65 85) !important; }
+html.dark .hover\:bg-white:hover { background-color: rgb(30 41 59) !important; }
+
+html.dark .border-slate-100 { border-color: rgb(30 41 59) !important; }
+html.dark .border-slate-200 { border-color: rgb(51 65 85) !important; }
+html.dark .border-slate-200\/80 { border-color: rgb(51 65 85 / 0.8) !important; }
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(30 41 59) !important; }
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(51 65 85) !important; }
+
+html.dark .text-slate-900 { color: rgb(248 250 252) !important; }
+html.dark .text-slate-800 { color: rgb(241 245 249) !important; }
+html.dark .text-slate-700 { color: rgb(226 232 240) !important; }
+html.dark .text-slate-600 { color: rgb(203 213 225) !important; }
+html.dark .text-slate-500 { color: rgb(148 163 184) !important; }
+html.dark .text-slate-400 { color: rgb(148 163 184) !important; }
+
+html.dark .bg-indigo-50 { background-color: rgb(49 46 129 / 0.25) !important; }
+html.dark .bg-indigo-50\/60 { background-color: rgb(49 46 129 / 0.35) !important; }
+html.dark .bg-indigo-100 { background-color: rgb(67 56 202 / 0.3) !important; }
+html.dark .border-indigo-100 { border-color: rgb(99 102 241 / 0.35) !important; }
+html.dark .text-indigo-900 { color: rgb(199 210 254) !important; }
+html.dark .text-indigo-700 { color: rgb(165 180 252) !important; }
+html.dark .text-indigo-600 { color: rgb(129 140 248) !important; }
+
+html.dark .bg-blue-50 { background-color: rgb(30 58 138 / 0.3) !important; }
+html.dark .bg-blue-100 { background-color: rgb(37 99 235 / 0.25) !important; }
+html.dark .bg-violet-50 { background-color: rgb(76 29 149 / 0.3) !important; }
+html.dark .bg-violet-100 { background-color: rgb(109 40 217 / 0.3) !important; }
+html.dark .bg-emerald-50 { background-color: rgb(6 78 59 / 0.35) !important; }
+html.dark .bg-emerald-100 { background-color: rgb(5 150 105 / 0.25) !important; }
+html.dark .bg-amber-50 { background-color: rgb(120 53 15 / 0.35) !important; }
+html.dark .bg-amber-100 { background-color: rgb(217 119 6 / 0.25) !important; }
+html.dark .bg-rose-50 { background-color: rgb(136 19 55 / 0.35) !important; }
+html.dark .bg-rose-100 { background-color: rgb(225 29 72 / 0.25) !important; }
+
+html.dark .from-slate-50 { --tw-gradient-from: rgb(15 23 42) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(15 23 42 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+html.dark .from-violet-50 { --tw-gradient-from: rgb(46 16 101 / 0.5) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(46 16 101 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+html.dark .from-blue-50 { --tw-gradient-from: rgb(23 37 84 / 0.55) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(23 37 84 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+html.dark .from-amber-50 { --tw-gradient-from: rgb(69 26 3 / 0.55) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(69 26 3 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+html.dark .from-emerald-50 { --tw-gradient-from: rgb(6 78 59 / 0.55) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(6 78 59 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+html.dark .from-indigo-50 { --tw-gradient-from: rgb(30 27 75 / 0.7) var(--tw-gradient-from-position) !important; --tw-gradient-to: rgb(30 27 75 / 0) var(--tw-gradient-to-position) !important; --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important; }
+html.dark .to-white { --tw-gradient-to: rgb(15 23 42) var(--tw-gradient-to-position) !important; }
+
+html.dark .shadow-sm { --tw-shadow-color: rgb(0 0 0 / 0.35) !important; }
+html.dark .ring-slate-200 { --tw-ring-color: rgb(51 65 85) !important; }
+html.dark .ring-violet-200 { --tw-ring-color: rgb(139 92 246 / 0.45) !important; }
+html.dark .ring-offset-1 { --tw-ring-offset-color: rgb(2 6 23) !important; }
+
+html.dark select,
+html.dark input,
+html.dark textarea {
+  color-scheme: dark;
+}

@@ -1,0 +1,77 @@
+# Infra only (default):  docker compose up -d
+# Full stack (API + Celery): docker compose --profile app up -d --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: crm_db
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crm -d crm_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    profiles: ["app"]
+    build:
+      context: ./CRM_Backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./CRM_Backend/.env.docker
+    volumes:
+      - ./CRM_Backend/media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  celery-worker:
+    profiles: ["app"]
+    build:
+      context: ./CRM_Backend
+    command: ["celery", "-A", "config", "worker", "-l", "info"]
+    env_file:
+      - ./CRM_Backend/.env.docker
+    volumes:
+      - ./CRM_Backend/media:/app/media
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  celery-beat:
+    profiles: ["app"]
+    build:
+      context: ./CRM_Backend
+    command: ["celery", "-A", "config", "beat", "-l", "info"]
+    env_file:
+      - ./CRM_Backend/.env.docker
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
