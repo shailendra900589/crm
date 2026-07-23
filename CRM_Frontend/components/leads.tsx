@@ -9,7 +9,7 @@ import { api, getProjectId, onProjectChange, LEAD_STATUSES, type CallOutcome, ty
 import { LogCallForm } from "@/components/log-call";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Calendar, Download, Eye, Pencil, Phone, PhoneCall, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, Calendar, Download, Eye, FileSpreadsheet, FileText, Filter, Pencil, PhoneCall, Plus, Search, Trash2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -249,123 +249,180 @@ export function LeadsView() {
 
   const isOverdue = (date: string | null) => date && date < today;
 
+  const selectCls =
+    "h-10 rounded-xl border border-transparent bg-slate-100/80 px-3 text-sm text-slate-700 outline-none transition hover:bg-slate-100 focus:border-blue-500/40 focus:bg-white focus:ring-2 focus:ring-blue-500/20 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10 dark:focus:bg-slate-900 dark:focus:ring-blue-500/30";
+
   return (
     <>
-      <div className="mb-4 flex gap-2">
-        {(["list", "bulk"] as const).map((t) => (
-          <button key={t} onClick={() => setViewTab(t)} className={cn(
-            "rounded-xl px-4 py-2 text-sm font-medium capitalize transition",
-            viewTab === t
-              ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
-              : "border border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-500/40 dark:hover:text-blue-300"
-          )}>{t === "list" ? "Leads List" : "Bulk Upload"}</button>
-        ))}
-      </div>
+      {/* Unified toolbar */}
+      <section className="mb-5 overflow-hidden rounded-2xl border border-slate-200/70 bg-gradient-to-br from-white via-white to-slate-50/80 shadow-sm dark:border-white/10 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 dark:shadow-none dark:ring-1 dark:ring-white/5">
+        <div className="flex flex-col gap-4 p-4 sm:p-5">
+          {/* Row 1: title + tabs + primary actions */}
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <h2 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">Leads</h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {data ? (
+                    <>
+                      <span className="font-semibold text-slate-700 dark:text-slate-200">{data.count}</span>
+                      {" "}result{data.count === 1 ? "" : "s"}
+                      {activeFilters > 0 ? " · filtered" : ""}
+                    </>
+                  ) : (
+                    "Search, filter and manage pipeline"
+                  )}
+                </p>
+              </div>
+              <div className="inline-flex rounded-xl bg-slate-100/90 p-1 dark:bg-white/5">
+                {(["list", "bulk"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setViewTab(t)}
+                    className={cn(
+                      "rounded-lg px-3.5 py-1.5 text-sm font-medium transition",
+                      viewTab === t
+                        ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
+                        : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white",
+                    )}
+                  >
+                    {t === "list" ? "List" : "Bulk upload"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {viewTab === "list" && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={exporting}
+                  onClick={async () => {
+                    setExporting(true);
+                    try {
+                      await api.exportLeads({ ...exportOpts, format: "xlsx" });
+                    } finally {
+                      setExporting(false);
+                    }
+                  }}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-emerald-200/80 bg-emerald-50 px-3 text-sm font-medium text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Excel
+                </button>
+                <button
+                  type="button"
+                  disabled={exporting}
+                  onClick={async () => {
+                    setExporting(true);
+                    try {
+                      await api.exportLeads({ ...exportOpts, format: "pdf" });
+                    } finally {
+                      setExporting(false);
+                    }
+                  }}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-rose-200/80 bg-rose-50 px-3 text-sm font-medium text-rose-800 transition hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/20"
+                >
+                  <FileText className="h-4 w-4" />
+                  {exporting ? "…" : "PDF"}
+                </button>
+                <Button onClick={openAdd} className="h-10 gap-2 shadow-md shadow-blue-600/20">
+                  <Plus className="h-4 w-4" /> Add Lead
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {viewTab === "list" && (
+            <>
+              {/* Row 2: search + filters in one strip */}
+              <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    placeholder="Search merchant, mobile, city, product…"
+                    className="h-11 w-full rounded-xl border border-transparent bg-slate-100/80 pl-10 pr-10 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500/40 focus:bg-white focus:ring-2 focus:ring-blue-500/20 dark:bg-white/5 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:bg-slate-950"
+                  />
+                  {searchInput && (
+                    <button
+                      type="button"
+                      aria-label="Clear search"
+                      onClick={() => setSearchInput("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-0.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="hidden items-center gap-1 text-xs font-medium uppercase tracking-wide text-slate-400 xl:inline-flex">
+                    <Filter className="h-3.5 w-3.5" /> Filters
+                  </span>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+                    className={selectCls}
+                  >
+                    <option value="">All statuses</option>
+                    {LEAD_STATUSES.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={productFilter}
+                    onChange={(e) => { setProductFilter(e.target.value); setPage(1); }}
+                    className={selectCls}
+                  >
+                    <option value="">All products</option>
+                    {(products || []).map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={companyFilter}
+                    onChange={(e) => { setCompanyFilter(e.target.value); setPage(1); }}
+                    className={cn(selectCls, "max-w-[180px]")}
+                  >
+                    <option value="">All companies</option>
+                    {(companies || []).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}{c.city ? ` · ${c.city}` : ""}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => { setOverdueFilter(!overdueFilter); setPage(1); }}
+                    className={cn(
+                      "inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-medium transition",
+                      overdueFilter
+                        ? "bg-rose-600 text-white shadow-sm shadow-rose-600/25"
+                        : "bg-slate-100/80 text-slate-600 hover:bg-slate-100 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10",
+                    )}
+                  >
+                    Overdue
+                  </button>
+                  {activeFilters > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="inline-flex h-10 items-center gap-1 rounded-xl px-3 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </section>
 
       {viewTab === "bulk" ? <BulkUpload /> : (
       <>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex w-full flex-col gap-3">
-          <div className="relative max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="Search merchant, mobile, city, product..."
-              className="pl-9"
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="">All Statuses</option>
-              {LEAD_STATUSES.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
-            <select
-              value={productFilter}
-              onChange={(e) => { setProductFilter(e.target.value); setPage(1); }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="">All Products</option>
-              {(products || []).map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-            <select
-              value={companyFilter}
-              onChange={(e) => { setCompanyFilter(e.target.value); setPage(1); }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-            >
-              <option value="">All Companies</option>
-              {(companies || []).map((c) => (
-                <option key={c.id} value={c.id}>{c.name}{c.city ? ` · ${c.city}` : ""}</option>
-              ))}
-            </select>
-            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
-              <input type="checkbox" checked={overdueFilter} onChange={(e) => { setOverdueFilter(e.target.checked); setPage(1); }} />
-              Overdue only
-            </label>
-            {activeFilters > 0 && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                <X className="h-3.5 w-3.5" />
-                Clear ({activeFilters})
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            className="gap-2"
-            disabled={exporting}
-            onClick={async () => {
-              setExporting(true);
-              try {
-                await api.exportLeads({ ...exportOpts, format: "xlsx" });
-              } finally {
-                setExporting(false);
-              }
-            }}
-          >
-            <Download className="h-4 w-4" />
-            Excel
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2"
-            disabled={exporting}
-            onClick={async () => {
-              setExporting(true);
-              try {
-                await api.exportLeads({ ...exportOpts, format: "pdf" });
-              } finally {
-                setExporting(false);
-              }
-            }}
-          >
-            <Download className="h-4 w-4" />
-            {exporting ? "Exporting..." : "PDF"}
-          </Button>
-          <Button onClick={openAdd} className="gap-2">
-            <Plus className="h-4 w-4" /> Add Lead
-          </Button>
-        </div>
-      </div>
-      {data && (
-        <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
-          Showing <span className="font-semibold text-slate-800 dark:text-slate-100">{data.count}</span> lead{data.count === 1 ? "" : "s"}
-          {activeFilters > 0 ? " with current filters" : ""}
-        </p>
-      )}
       <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:shadow-none dark:ring-1 dark:ring-white/5">
         <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-left text-sm">
