@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Create a ready .env.prod with real secrets on the EC2 server.
-# Usage (from repo root):
-#   bash scripts/make-env-prod.sh
+# Create .env.prod with secrets. CRM uses port 9080 (HRMS keeps :80).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,6 +15,7 @@ DBPASS="$(openssl rand -hex 16)"
 
 cat > .env.prod <<EOF
 # Auto-generated for https://crm.trackbook.co — $(date -u +%Y-%m-%dT%H:%MZ)
+# Separate from HRMS (https://hrms.trackbook.co)
 
 SECRET_KEY=${SECRET}
 POSTGRES_PASSWORD=${DBPASS}
@@ -35,14 +34,10 @@ DEBUG=False
 DIGEST_ENABLED=1
 LOG_LEVEL=INFO
 RUN_SEED=1
-HTTP_PORT=80
 USE_HTTPS=1
+HTTP_PORT=9080
 EOF
 
 chmod 600 .env.prod
-echo ""
-echo "Created .env.prod with random SECRET_KEY and POSTGRES_PASSWORD."
-echo "Next:"
-echo "  docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build"
-echo ""
-echo "After first successful login, set RUN_SEED=0 in .env.prod and change demo passwords."
+echo "Created .env.prod (HTTP_PORT=9080 — does not touch HRMS on :80)"
+echo "Next: bash scripts/ec2-fix-and-deploy.sh"

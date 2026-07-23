@@ -39,7 +39,23 @@ Switching to MongoDB would mean rewriting the backend — **do not do that for g
 
 ---
 
-## Fastest AWS path (one EC2)
+## Coexistence with HRMS
+
+This EC2 may already run **HRMS** at `https://hrms.trackbook.co` on host nginx `:80`.
+
+CRM is isolated:
+
+- Docker project name: `amazon-crm`
+- Public entry: host nginx vhost `crm.trackbook.co` → **`127.0.0.1:9080`**
+- Own Postgres + Redis (no host ports, not the HRMS DB)
+
+See **[deploy/COEXIST-HRMS.md](deploy/COEXIST-HRMS.md)**.
+
+**Do not** stop host nginx. Use:
+
+```bash
+cd ~/crm && git pull && bash scripts/ec2-fix-and-deploy.sh
+```
 
 ### 1) Create EC2
 

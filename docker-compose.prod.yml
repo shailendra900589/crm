@@ -1,7 +1,10 @@
-# Production stack — one command deploy
-#   1. Copy .env.prod.example → .env.prod and edit secrets
-#   2. docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
-#   3. Open http://YOUR_HOST/
+# Production stack — coexists with other apps (e.g. HRMS on :80).
+# Host nginx proxies https://crm.trackbook.co → 127.0.0.1:9080
+#   See deploy/nginx/host-crm.trackbook.co.conf and scripts/ec2-fix-and-deploy.sh
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+
+name: amazon-crm
 
 services:
   postgres:
@@ -13,6 +16,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.prod}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    # No host ports — isolated from HRMS / other DBs
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm} -d ${POSTGRES_DB:-crm_db}"]
       interval: 5s
@@ -27,6 +31,7 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redisdata:/data
+    # No host ports — isolated Redis for this CRM only
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -129,8 +134,9 @@ services:
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    # Localhost only — host nginx (HRMS-safe) proxies crm.trackbook.co here
     ports:
-      - "${HTTP_PORT:-80}:80"
+      - "127.0.0.1:${HTTP_PORT:-9080}:80"
     volumes:
       - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - media_data:/var/www/media:ro
@@ -148,3 +154,4 @@ volumes:
 networks:
   crm:
     driver: bridge
+    name: amazon-crm-net
