@@ -254,8 +254,10 @@ export function LeadsView() {
       <div className="mb-4 flex gap-2">
         {(["list", "bulk"] as const).map((t) => (
           <button key={t} onClick={() => setViewTab(t)} className={cn(
-            "rounded-xl px-4 py-2 text-sm font-medium capitalize",
-            viewTab === t ? "bg-blue-600 text-white" : "bg-white text-slate-600 border border-slate-200"
+            "rounded-xl px-4 py-2 text-sm font-medium capitalize transition",
+            viewTab === t
+              ? "bg-blue-600 text-white shadow-sm shadow-blue-600/25"
+              : "border border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-blue-500/40 dark:hover:text-blue-300"
           )}>{t === "list" ? "Leads List" : "Bulk Upload"}</button>
         ))}
       </div>
@@ -277,7 +279,7 @@ export function LeadsView() {
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="">All Statuses</option>
               {LEAD_STATUSES.map((s) => (
@@ -287,7 +289,7 @@ export function LeadsView() {
             <select
               value={productFilter}
               onChange={(e) => { setProductFilter(e.target.value); setPage(1); }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="">All Products</option>
               {(products || []).map((p) => (
@@ -297,14 +299,14 @@ export function LeadsView() {
             <select
               value={companyFilter}
               onChange={(e) => { setCompanyFilter(e.target.value); setPage(1); }}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
             >
               <option value="">All Companies</option>
               {(companies || []).map((c) => (
                 <option key={c.id} value={c.id}>{c.name}{c.city ? ` · ${c.city}` : ""}</option>
               ))}
             </select>
-            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+            <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
               <input type="checkbox" checked={overdueFilter} onChange={(e) => { setOverdueFilter(e.target.checked); setPage(1); }} />
               Overdue only
             </label>
@@ -312,7 +314,7 @@ export function LeadsView() {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 <X className="h-3.5 w-3.5" />
                 Clear ({activeFilters})
@@ -359,43 +361,71 @@ export function LeadsView() {
         </div>
       </div>
       {data && (
-        <p className="mb-3 text-sm text-slate-500">
-          Showing <span className="font-semibold text-slate-800">{data.count}</span> lead{data.count === 1 ? "" : "s"}
+        <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">
+          Showing <span className="font-semibold text-slate-800 dark:text-slate-100">{data.count}</span> lead{data.count === 1 ? "" : "s"}
           {activeFilters > 0 ? " with current filters" : ""}
         </p>
       )}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="px-4 py-3">Merchant</th>
-              <th className="px-4 py-3">Product</th>
-              <th className="px-4 py-3">BDM</th>
-              <th className="px-4 py-3">City</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Follow-up</th>
-              <th className="px-4 py-3 text-right">Actions</th>
+      <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:shadow-none dark:ring-1 dark:ring-white/5">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200/80 bg-gradient-to-r from-slate-50 to-white text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-700/80 dark:from-slate-900 dark:to-slate-900 dark:text-slate-400">
+              <th className="px-4 py-3.5">Merchant</th>
+              <th className="px-4 py-3.5">Product</th>
+              <th className="px-4 py-3.5">BDM</th>
+              <th className="px-4 py-3.5">City</th>
+              <th className="px-4 py-3.5">Status</th>
+              <th className="px-4 py-3.5">Follow-up</th>
+              <th className="px-4 py-3.5 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
             {isLoading ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Loading...</td></tr>
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Loading...</td></tr>
             ) : leads.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">No leads found</td></tr>
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No leads found</td></tr>
             ) : (
               leads.map((lead) => (
-                <tr key={lead.id} className="border-b border-slate-100 hover:bg-slate-50/50">
-                  <td className="px-4 py-3 font-medium text-slate-900">{lead.merchant_name}</td>
-                  <td className="px-4 py-3 text-slate-600">{lead.product_name || "—"}</td>
-                  <td className="px-4 py-3 text-slate-600">{lead.bdm_name}</td>
-                  <td className="px-4 py-3 text-slate-600">{lead.merchant_city}</td>
-                  <td className="px-4 py-3"><Badge status={lead.status} label={lead.status_display} /></td>
-                  <td className={cn("px-4 py-3", isOverdue(lead.follow_up_date) && "font-medium text-rose-600")}>
-                    {lead.follow_up_date || "—"}
-                    {isOverdue(lead.follow_up_date) && <span className="ml-1 text-xs">(Overdue)</span>}
+                <tr
+                  key={lead.id}
+                  className={cn(
+                    "group bg-transparent transition-colors",
+                    "hover:bg-blue-50/70 dark:hover:bg-blue-500/[0.07]",
+                    selected?.id === lead.id && "bg-blue-50/50 dark:bg-blue-500/10",
+                  )}
+                >
+                  <td className="px-4 py-3.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelected(lead)}
+                      className="text-left font-semibold text-slate-900 transition group-hover:text-blue-700 dark:text-slate-100 dark:group-hover:text-blue-300"
+                    >
+                      {lead.merchant_name}
+                    </button>
+                    {lead.brand_name ? (
+                      <p className="mt-0.5 text-xs text-slate-400">{lead.brand_name}</p>
+                    ) : null}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex justify-end gap-1">
+                  <td className="px-4 py-3.5 text-slate-600 dark:text-slate-300">{lead.product_name || "—"}</td>
+                  <td className="px-4 py-3.5 text-slate-600 dark:text-slate-300">{lead.bdm_name}</td>
+                  <td className="px-4 py-3.5 text-slate-600 dark:text-slate-300">{lead.merchant_city || "—"}</td>
+                  <td className="px-4 py-3.5"><Badge status={lead.status} label={lead.status_display} /></td>
+                  <td className={cn(
+                    "px-4 py-3.5 tabular-nums",
+                    isOverdue(lead.follow_up_date)
+                      ? "font-semibold text-rose-600 dark:text-rose-400"
+                      : "text-slate-600 dark:text-slate-300",
+                  )}>
+                    {lead.follow_up_date || "—"}
+                    {isOverdue(lead.follow_up_date) && (
+                      <span className="ml-1.5 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-rose-700 dark:bg-rose-500/20 dark:text-rose-300">
+                        Overdue
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <div className="flex justify-end gap-0.5 opacity-80 transition group-hover:opacity-100">
                       <ActionBtn icon={Eye} title="View" onClick={() => setSelected(lead)} />
                       <ActionBtn icon={Calendar} title="Follow-up" onClick={() => openFollowUp(lead)} />
                       <ActionBtn icon={PhoneCall} title="Log call" onClick={() => openLogCall(lead)} />
@@ -411,6 +441,7 @@ export function LeadsView() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {totalPages > 1 && (
@@ -727,7 +758,12 @@ function ActionBtn({ icon: Icon, title, onClick, danger }: {
     <button
       title={title}
       onClick={(e) => { e.stopPropagation(); onClick(); }}
-      className={cn("rounded-lg p-1.5 transition", danger ? "hover:bg-rose-50 text-rose-500" : "hover:bg-slate-100 text-slate-500")}
+      className={cn(
+        "rounded-lg p-1.5 transition",
+        danger
+          ? "text-rose-500 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/15"
+          : "text-slate-500 hover:bg-blue-50 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-blue-500/15 dark:hover:text-blue-300",
+      )}
     >
       <Icon className="h-4 w-4" />
     </button>
