@@ -76,8 +76,12 @@ class Command(BaseCommand):
             )
             team.members.set([bdm, tl])
 
-        manager.assigned_projects.set(projects)
-        bdm.assigned_projects.set(projects)
+        # Project hierarchy: Manager owns Flipkart only; TL/BDM inherit via reports_to
+        # (other projects remain Admin-only unless assigned)
+        flipkart = next((p for p in projects if p.slug == "flipkart"), projects[0])
+        manager.assigned_projects.set([flipkart])
+        tl.assigned_projects.set([flipkart])
+        bdm.assigned_projects.set([flipkart])
 
         merchants_data = [
             ("Sharma Electronics", "9876543210", "Mumbai", "Sharma Tech"),

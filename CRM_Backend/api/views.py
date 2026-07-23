@@ -27,7 +27,10 @@ from .permissions import (
     get_descendant_ids,
     is_admin,
     leads_for_user,
+    project_ids_for_user,
+    projects_for_user,
     teams_for_user,
+    user_can_access_project,
     user_can_access_project_form,
     users_for_user,
     validate_form_answers,
@@ -57,10 +60,27 @@ from .tasks import generate_bulk_template, process_bulk_upload
 
 User = get_user_model()
 
-def filter_by_project(request, qs):
+def filter_by_project(request, qs, *, field="project_id"):
+    """
+    Scope queryset to the caller's hierarchy projects, then optional ?project=.
+    Non-admins cannot request a project outside their assigned/inherited scope.
+    """
+    user = request.user
+    allowed = project_ids_for_user(user)
+    if allowed is not None:
+        if not allowed:
+            return qs.none()
+        qs = qs.filter(**{f"{field}__in": allowed})
+
     project_id = request.query_params.get("project")
     if project_id:
-        return qs.filter(project_id=project_id)
+        try:
+            pid = int(project_id)
+        except (TypeError, ValueError):
+            return qs.none()
+        if allowed is not None and pid not in allowed:
+            return qs.none()
+        qs = qs.filter(**{field: pid})
     return qs
 
 
@@ -185,17 +205,17 @@ class GlobalSearchView(APIView):
             .select_related("project")
             .order_by("name")[:6]
         )
-        if not is_admin(request.user):
-            lead_project_ids = leads_for_user(request.user).values_list("project_id", flat=True).distinct()
-            companies_qs = companies_qs.filter(project_id__in=lead_project_ids)
+        allowed_projects = project_ids_for_user(request.user)
+        if allowed_projects is not None:
+            companies_qs = companies_qs.filter(project_id__in=allowed_projects) if allowed_projects else companies_qs.none()
 
         products_qs = Product.objects.filter(Q(name__icontains=q) | Q(description__icontains=q), is_active=True).select_related("project")[:6]
-        if not is_admin(request.user):
-            products_qs = products_qs.filter(project_id__in=request.user.assigned_projects.values_list("id", flat=True))
+        if allowed_projects is not None:
+            products_qs = products_qs.filter(project_id__in=allowed_projects) if allowed_projects else products_qs.none()
 
-        projects_qs = Project.objects.filter(Q(name__icontains=q) | Q(description__icontains=q), is_active=True)[:6]
-        if not is_admin(request.user):
-            projects_qs = projects_qs.filter(id__in=request.user.assigned_projects.values_list("id", flat=True))
+        projects_qs = projects_for_user(request.user).filter(
+            Q(name__icontains=q) | Q(description__icontains=q), is_active=True
+        )[:6]
 
         return Response({
             "leads": [
@@ -244,7 +264,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = projects_for_user(self.request.user).annotate(lead_count=Count("leads")).order_by("name")
         if self.action == "list" and not is_admin(self.request.user):
             return qs.filter(is_active=True)
         return qs
@@ -313,9 +333,18 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset()
+        allowed = project_ids_for_user(self.request.user)
+        if allowed is not None:
+            qs = qs.filter(project_id__in=allowed) if allowed else qs.none()
         project_id = self.request.query_params.get("project")
         if project_id:
-            qs = qs.filter(project_id=project_id)
+            try:
+                pid = int(project_id)
+            except (TypeError, ValueError):
+                return qs.none()
+            if allowed is not None and pid not in allowed:
+                return qs.none()
+            qs = qs.filter(project_id=pid)
         if self.action == "list" and not is_admin(self.request.user):
             qs = qs.filter(is_active=True)
         return qs

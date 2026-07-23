@@ -126,7 +126,15 @@ export function ReportsPage() {
 
       <DashboardFilters
         filters={filters}
-        onChange={setFilters}
+        onChange={(next) => {
+          const pid = next.project || getProjectId() || "";
+          const scoped = { ...next, project: me?.role === "Admin" ? next.project : pid };
+          if (scoped.project) {
+            // keep shell in sync for non-admin
+          }
+          setFilters(scoped);
+        }}
+        allowAllProjects={me?.role === "Admin"}
         projects={(projects || []).map((p) => ({ id: p.id, name: p.name }))}
         products={(products || []).map((p) => ({ id: p.id, name: p.name }))}
         companies={(companies || []).map((c) => ({ id: c.id, name: c.name, extra: c.city }))}

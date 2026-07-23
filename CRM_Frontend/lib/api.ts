@@ -83,13 +83,18 @@ export function fileUrl(path?: string | null, url?: string | null) {
 
 function buildQuery(params: Record<string, string | undefined> = {}) {
   const sp = new URLSearchParams();
-  // Only auto-scope to global project when caller did not pass a project key at all.
-  // Explicit project: "" / undefined means "all projects" (do not force header project).
+  // Auto-inject shell project only when caller omitted the key entirely.
+  // Explicit project: "" means "all projects" (Admin). Non-admin UIs must always pass a real id.
   if (!("project" in params)) {
     const pid = getProjectId();
     if (pid) sp.set("project", pid);
+  } else if (params.project) {
+    sp.set("project", String(params.project));
   }
-  Object.entries(params).forEach(([k, v]) => { if (v) sp.set(k, v); });
+  Object.entries(params).forEach(([k, v]) => {
+    if (k === "project") return;
+    if (v) sp.set(k, v);
+  });
   const s = sp.toString();
   return s ? `?${s}` : "";
 }
@@ -179,15 +184,17 @@ export const api = {
 
   dashboard: (filters?: DashboardFilters) =>
     request<DashboardStats>(`/api/dashboard/${buildQuery({
-      project: filters?.project,
+      // Always scope to shell project when filter project is empty (hierarchy users)
+      project: filters?.project || getProjectId() || undefined,
       product: filters?.product,
       company: filters?.company,
       from: filters?.from,
       to: filters?.to,
     })}`),
-  followUpsHub: () => request<FollowUpsHub>("/api/follow-ups/"),
+  followUpsHub: () =>
+    request<FollowUpsHub>(`/api/follow-ups/${buildQuery({})}`),
   alertsHub: (project?: string) =>
-    request<AlertsHub>(`/api/alerts/${buildQuery({ project: project || undefined })}`),
+    request<AlertsHub>(`/api/alerts/${buildQuery({ project: project || getProjectId() || undefined })}`),
   reportsPerformance: (filters?: ReportFilters) =>
     request<PerformanceReport>(`/api/reports/performance/${buildQuery({
       project: filters?.project,

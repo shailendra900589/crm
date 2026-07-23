@@ -20,6 +20,9 @@ class RoleCascadeTests(TestCase):
             username="bdm2", password="password123", role=User.Role.BDM, reports_to=self.manager
         )
         self.project = Project.objects.create(name="Test", slug="test", created_by=self.admin)
+        self.manager.assigned_projects.add(self.project)
+        self.bdm1.assigned_projects.add(self.project)
+        self.bdm2.assigned_projects.add(self.project)
         self.client = APIClient()
 
     def _login(self, username):
@@ -41,6 +44,24 @@ class RoleCascadeTests(TestCase):
         res = self.client.get(f"/api/leads/?project={self.project.id}")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["count"], 1)
+
+    def test_bdm_inherits_manager_project_only(self):
+        other = Project.objects.create(name="Other", slug="other", created_by=self.admin)
+        # Manager only has self.project — bdm1 has no direct assignment
+        self.bdm1.assigned_projects.clear()
+        Lead.objects.create(project=self.project, merchant_id=self._merchant("A", "111"), bdm=self.bdm1)
+        Lead.objects.create(project=other, merchant_id=self._merchant("B", "222"), bdm=self.bdm1)
+
+        self._login("bdm1")
+        projects = self.client.get("/api/projects/")
+        self.assertEqual(projects.status_code, 200)
+        ids = {p["id"] for p in projects.data}
+        self.assertIn(self.project.id, ids)
+        self.assertNotIn(other.id, ids)
+
+        leads = self.client.get("/api/leads/")
+        self.assertEqual(leads.status_code, 200)
+        self.assertEqual(leads.data["count"], 1)
 
     def test_admin_can_access_admin_dashboard(self):
         self._login("admin")

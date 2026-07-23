@@ -217,6 +217,21 @@ class LeadCreateSerializer(serializers.Serializer):
     )
     force = serializers.BooleanField(required=False, default=False, write_only=True)
 
+    def validate_project(self, project):
+        from .permissions import user_can_access_project
+
+        user = self.context["request"].user
+        if not user_can_access_project(user, project.id):
+            raise serializers.ValidationError("You do not have access to this project.")
+        return project
+
+    def validate(self, attrs):
+        product = attrs.get("product")
+        project = attrs.get("project")
+        if product and project and product.project_id != project.id:
+            raise serializers.ValidationError({"product": "Product must belong to the selected project."})
+        return attrs
+
     def create(self, validated_data):
         validated_data.pop("force", None)
         user = self.context["request"].user

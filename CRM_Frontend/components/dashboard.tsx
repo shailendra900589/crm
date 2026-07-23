@@ -115,11 +115,14 @@ export function DashboardView() {
   }, []);
 
   const onFiltersChange = (next: DashboardFilterState) => {
-    if (next.project && next.project !== filters.project) {
-      setProjectId(next.project);
-      setActiveProjectId(next.project);
+    const pid = next.project || getProjectId() || "";
+    // Hierarchy users always stay scoped to an active project
+    const scoped = { ...next, project: pid || next.project };
+    if (scoped.project && scoped.project !== filters.project) {
+      setProjectId(scoped.project);
+      setActiveProjectId(scoped.project);
     }
-    setFilters(next);
+    setFilters(scoped);
   };
 
   useEffect(() => {
@@ -239,6 +242,7 @@ export function DashboardView() {
         filters={filters}
         onChange={onFiltersChange}
         showManager={false}
+        allowAllProjects={false}
         projects={(projects || []).filter((p) => p.is_active).map((p) => ({ id: p.id, name: p.name }))}
         products={(products || []).map((p) => ({ id: p.id, name: p.name, extra: p.project_name }))}
         companies={(companies || []).map((c) => ({ id: c.id, name: c.name, extra: c.city }))}

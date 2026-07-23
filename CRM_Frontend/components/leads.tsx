@@ -95,6 +95,7 @@ export function LeadsView() {
     queryKey: ["leads", projectId, statusFilter, overdueFilter, productFilter, companyFilter, searchQ, page],
     queryFn: () =>
       api.leads({
+        project: projectId ? Number(projectId) : undefined,
         status: statusFilter || undefined,
         overdue: overdueFilter,
         product: productFilter || undefined,

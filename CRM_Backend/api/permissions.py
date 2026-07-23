@@ -31,6 +31,67 @@ def get_descendant_ids(user):
     return ids
 
 
+def _direct_project_ids(user):
+    """Projects explicitly assigned to a user or via team membership/management."""
+    from .models import Team
+
+    ids = set(user.assigned_projects.values_list("id", flat=True))
+    ids.update(
+        Team.objects.filter(Q(manager=user) | Q(members=user))
+        .exclude(project_id=None)
+        .values_list("project_id", flat=True)
+    )
+    return {i for i in ids if i}
+
+
+def project_ids_for_user(user):
+    """
+    Effective project scope for hierarchy ACL.
+
+    Admin → None (unrestricted).
+    Others → own assigned/team projects ∪ ancestors' (Manager/TL) assigned/team projects.
+    Empty set means no project access (no cross-project leakage).
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return set()
+    if user.role == User.Role.ADMIN:
+        return None
+
+    ids = set(_direct_project_ids(user))
+
+    # Inherit from reporting chain so Manager's project access flows to TL/BDM team
+    ancestor = getattr(user, "reports_to", None)
+    seen = {user.id}
+    while ancestor and ancestor.id not in seen:
+        seen.add(ancestor.id)
+        if ancestor.role in (User.Role.MANAGER, User.Role.TL, User.Role.ADMIN):
+            ids |= _direct_project_ids(ancestor)
+        ancestor = getattr(ancestor, "reports_to", None)
+
+    return ids
+
+
+def projects_for_user(user):
+    """Project queryset visible to the user."""
+    from .models import Project
+
+    if user.role == User.Role.ADMIN:
+        return Project.objects.all()
+    ids = project_ids_for_user(user)
+    if not ids:
+        return Project.objects.none()
+    return Project.objects.filter(id__in=ids)
+
+
+def user_can_access_project(user, project_id):
+    if not project_id:
+        return False
+    if is_admin(user):
+        return True
+    ids = project_ids_for_user(user)
+    return int(project_id) in ids
+
+
 def users_for_user(user):
     """Users visible in hierarchy for listing/management."""
     if user.role == User.Role.ADMIN:
@@ -49,15 +110,22 @@ def leads_for_user(user):
 
     if user.role == User.Role.ADMIN:
         return Lead.objects.all()
+
     if user.role == User.Role.MANAGER:
         descendants = get_descendant_ids(user)
-        return Lead.objects.filter(Q(bdm=user) | Q(bdm_id__in=descendants))
-    if user.role == User.Role.TL:
+        qs = Lead.objects.filter(Q(bdm=user) | Q(bdm_id__in=descendants))
+    elif user.role == User.Role.TL:
         team_ids = get_descendant_ids(user)
-        return Lead.objects.filter(Q(bdm=user) | Q(bdm_id__in=team_ids))
-    qs = Lead.objects.filter(bdm=user)
-    if user.assigned_projects.exists():
-        qs = qs.filter(project__in=user.assigned_projects.all())
+        qs = Lead.objects.filter(Q(bdm=user) | Q(bdm_id__in=team_ids))
+    else:
+        qs = Lead.objects.filter(bdm=user)
+
+    # Hierarchy project clamp — team only sees manager-assigned projects
+    project_ids = project_ids_for_user(user)
+    if project_ids is not None:
+        if not project_ids:
+            return Lead.objects.none()
+        qs = qs.filter(project_id__in=project_ids)
     return qs
 
 
@@ -103,6 +171,8 @@ def find_duplicate_leads(user, project_id, mobile, *, exclude_lead_id=None):
     norm = normalize_mobile(mobile)
     if not norm or not project_id:
         return []
+    if not user_can_access_project(user, project_id):
+        return []
     qs = leads_for_user(user).filter(project_id=project_id).select_related("merchant", "bdm", "product", "project")
     if exclude_lead_id:
         qs = qs.exclude(id=exclude_lead_id)
@@ -123,17 +193,7 @@ def can_reassign_to(actor, target):
 
 
 def user_can_access_project_form(user, project_id):
-    from .models import Lead, Team
-
-    if is_admin(user):
-        return True
-    if user.assigned_projects.filter(id=project_id).exists():
-        return True
-    if Team.objects.filter(project_id=project_id, members=user).exists():
-        return True
-    if user.role in (User.Role.MANAGER, User.Role.TL):
-        return leads_for_user(user).filter(project_id=project_id).exists()
-    return Lead.objects.filter(bdm=user, project_id=project_id).exists()
+    return user_can_access_project(user, project_id)
 
 
 def visits_for_user(user):
@@ -143,18 +203,32 @@ def visits_for_user(user):
     if user.role == User.Role.ADMIN:
         return qs
     if user.role == User.Role.BDM:
-        return qs.filter(assigned_to=user)
-    descendants = get_descendant_ids(user)
-    return qs.filter(Q(assigned_to=user) | Q(assigned_to_id__in=descendants) | Q(assigned_by=user))
+        qs = qs.filter(assigned_to=user)
+    else:
+        descendants = get_descendant_ids(user)
+        qs = qs.filter(Q(assigned_to=user) | Q(assigned_to_id__in=descendants) | Q(assigned_by=user))
+
+    project_ids = project_ids_for_user(user)
+    if project_ids is not None:
+        if not project_ids:
+            return LeadVisit.objects.none()
+        qs = qs.filter(lead__project_id__in=project_ids)
+    return qs
 
 
 def my_assigned_visits(user):
     """Visits in the current user's personal workdesk queue."""
     from .models import LeadVisit
 
-    return LeadVisit.objects.select_related(
+    qs = LeadVisit.objects.select_related(
         "lead", "assigned_to", "assigned_by", "lead__merchant"
     ).filter(assigned_to=user)
+    project_ids = project_ids_for_user(user)
+    if project_ids is not None:
+        if not project_ids:
+            return LeadVisit.objects.none()
+        qs = qs.filter(lead__project_id__in=project_ids)
+    return qs
 
 
 def validate_form_answers(schema, answers):

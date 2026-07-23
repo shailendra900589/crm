@@ -15,6 +15,7 @@ export function DashboardFilters({
   companies,
   managers,
   showManager = true,
+  allowAllProjects = false,
   className,
 }: {
   filters: AdminFilters;
@@ -24,6 +25,8 @@ export function DashboardFilters({
   companies?: Option[];
   managers?: Option[];
   showManager?: boolean;
+  /** Admin-only: allow clearing project to aggregate all. Hierarchy users stay project-scoped. */
+  allowAllProjects?: boolean;
   className?: string;
 }) {
   const activeCount = [
@@ -44,17 +47,28 @@ export function DashboardFilters({
     onChange(next);
   };
 
-  const clear = () => onChange({});
+  const clear = () => {
+    if (allowAllProjects) {
+      onChange({});
+      return;
+    }
+    // Keep active project — only clear secondary filters
+    onChange({ project: filters.project || "" });
+  };
+
+  const projectOptions = allowAllProjects
+    ? [{ id: 0, name: "All Projects" }, ...(projects || [])]
+    : (projects || []);
 
   return (
-    <div className={cn("rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", className)}>
+    <div className={cn("rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900", className)}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100">
-            <Filter className="h-4 w-4 text-indigo-600" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100 dark:bg-indigo-500/15">
+            <Filter className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900">Using Filters</h3>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Using Filters</h3>
             <p className="text-xs text-slate-500">Project-wise companies & products KPIs</p>
           </div>
           {activeCount > 0 && (
@@ -63,7 +77,7 @@ export function DashboardFilters({
             </span>
           )}
         </div>
-        {activeCount > 0 && (
+        {activeCount > (allowAllProjects ? 0 : 1) && (
           <Button variant="outline" className="h-8 gap-1 text-xs" onClick={clear}>
             <X className="h-3.5 w-3.5" /> Clear all
           </Button>
@@ -75,8 +89,9 @@ export function DashboardFilters({
           label="Project"
           value={filters.project || ""}
           onChange={(v) => set({ project: v })}
-          options={[{ id: 0, name: "All Projects" }, ...(projects || [])]}
-          allValue=""
+          options={projectOptions}
+          allValue={allowAllProjects ? "" : undefined}
+          placeholder={allowAllProjects ? undefined : "Select project"}
         />
         <FilterSelect
           label="Product"
@@ -122,13 +137,15 @@ function FilterSelect({
   options,
   allValue,
   disabled,
+  placeholder,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: Option[];
-  allValue: string;
+  allValue?: string;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   return (
     <div>
@@ -137,10 +154,22 @@ function FilterSelect({
         disabled={disabled}
         className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:focus:ring-indigo-900/40 dark:disabled:bg-slate-800"
         value={value}
-        onChange={(e) => onChange(e.target.value === allValue ? "" : e.target.value)}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (allValue !== undefined && v === allValue) onChange("");
+          else onChange(v);
+        }}
       >
+        {placeholder && !options.some((o) => String(o.id) === value) ? (
+          <option value="" disabled>
+            {placeholder}
+          </option>
+        ) : null}
         {options.map((o) => (
-          <option key={`${label}-${o.id}-${o.name}`} value={o.id === 0 ? allValue : String(o.id)}>
+          <option
+            key={`${label}-${o.id}-${o.name}`}
+            value={allValue !== undefined && o.id === 0 ? allValue : String(o.id)}
+          >
             {o.extra ? `${o.name} · ${o.extra}` : o.name}
           </option>
         ))}

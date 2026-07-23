@@ -146,6 +146,7 @@ export function AdminPanel() {
           <DashboardFilters
             filters={filters}
             onChange={onFiltersChange}
+            allowAllProjects
             projects={(projects || []).filter((p) => p.is_active).map((p) => ({ id: p.id, name: p.name }))}
             products={(products || []).map((p) => ({ id: p.id, name: p.name, extra: p.project_name }))}
             companies={(companies || []).map((c) => ({ id: c.id, name: c.name, extra: c.city }))}
