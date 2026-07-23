@@ -90,9 +90,8 @@ if [[ -n "$CERT" ]]; then
   cat >> "$OUT" <<EOF
 
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     server_name crm.trackbook.co www.crm.trackbook.co;
 
     ssl_certificate     ${CERT};
@@ -155,9 +154,8 @@ EOF
     if [[ -n "$CERT" ]]; then
       cat >> "$OUT" <<EOF
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     server_name crm.trackbook.co www.crm.trackbook.co;
     ssl_certificate     ${CERT};
     ssl_certificate_key ${KEY};
