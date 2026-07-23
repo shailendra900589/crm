@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Fix "Not secure" on https://crm.trackbook.co — issue a real cert for THIS hostname.
-# (Using only trackbook.co / hrms certs causes browser name mismatch.)
+# Fix Chrome "Not secure" on crm.trackbook.co
+# - Issue Let's Encrypt cert for crm.trackbook.co ONLY (no www)
+# - Force HTTP → HTTPS redirect
+# - Prove https works
 #
-# Paste ONLY:
+# Paste:
 #   cd ~/crm && git pull && bash scripts/fix-crm-ssl.sh
 set -euo pipefail
 
@@ -11,14 +13,23 @@ git pull --ff-only || true
 
 DOMAIN=crm.trackbook.co
 LIVE=/etc/letsencrypt/live/${DOMAIN}
-# Do NOT include www — DNS often has no www.crm record (NXDOMAIN breaks certbot)
 
-echo "=== 1) Ensure CRM app responds on :9080 ==="
+echo "=== 0) Quick facts ==="
+echo "Open in browser MUST be: https://${DOMAIN}  (not http://)"
+echo ""
+
+echo "=== 1) CRM on :9080 ==="
 curl -fsS -H "Host: ${DOMAIN}" http://127.0.0.1:9080/api/health/ >/dev/null
-echo "CRM :9080 OK"
+echo "OK"
 
-echo "=== 2) Ensure HTTP vhost exists (needed for certbot HTTP-01) ==="
-# Minimal :80 proxy so certbot / ACME can reach the host
+echo "=== 2) Install certbot ==="
+if ! command -v certbot >/dev/null 2>&1; then
+  sudo apt-get update -y
+  sudo apt-get install -y certbot python3-certbot-nginx
+fi
+
+echo "=== 3) HTTP-only vhost (ACME + app) ==="
+sudo mkdir -p /var/www/html
 sudo tee /etc/nginx/sites-available/crm.trackbook.co >/dev/null <<'EOF'
 map $http_upgrade $connection_upgrade_crm {
     default upgrade;
@@ -32,7 +43,6 @@ server {
     listen 80;
     listen [::]:80;
     server_name crm.trackbook.co;
-    client_max_body_size 50M;
 
     location /.well-known/acme-challenge/ {
         root /var/www/html;
@@ -53,41 +63,39 @@ server {
 }
 EOF
 sudo ln -sf /etc/nginx/sites-available/crm.trackbook.co /etc/nginx/sites-enabled/crm.trackbook.co
-sudo mkdir -p /var/www/html
 sudo nginx -t
 sudo systemctl reload nginx
 
-echo "=== 3) Install certbot if needed ==="
-if ! command -v certbot >/dev/null 2>&1; then
-  sudo apt-get update -y
-  sudo apt-get install -y certbot python3-certbot-nginx
-fi
-
-echo "=== 4) Issue / renew certificate for ${DOMAIN} ==="
-# Prefer nginx plugin (auto-wires SSL). Fallback: webroot then we write SSL block ourselves.
+echo "=== 4) Get certificate for ${DOMAIN} only ==="
 if sudo test -f "${LIVE}/fullchain.pem"; then
-  echo "Cert already exists — renewing if due"
-  sudo certbot renew --cert-name "${DOMAIN}" --non-interactive || true
+  echo "Cert exists"
 else
-  sudo certbot --nginx -d "${DOMAIN}" \
-    --non-interactive --agree-tos --register-unsafely-without-email --redirect \
-    || sudo certbot certonly --webroot -w /var/www/html \
-         -d "${DOMAIN}" \
-         --non-interactive --agree-tos --register-unsafely-without-email
+  # IMPORTANT: do not include www (NXDOMAIN)
+  set +e
+  sudo certbot certonly --webroot -w /var/www/html -d "${DOMAIN}" \
+    --non-interactive --agree-tos --register-unsafely-without-email
+  RC=$?
+  set -e
+  if [[ $RC -ne 0 ]] || ! sudo test -f "${LIVE}/fullchain.pem"; then
+    echo ""
+    echo "Certbot failed. Usually Cloudflare orange-cloud blocks HTTP-01."
+    echo "Do this, then re-run this script:"
+    echo "  1) Cloudflare → DNS → crm  → click cloud to GREY (DNS only)"
+    echo "  2) Wait 1–2 min"
+    echo "  3) bash scripts/fix-crm-ssl.sh"
+    echo "  4) Cloudflare → turn orange cloud ON again"
+    echo "  5) Cloudflare → SSL/TLS → Full (strict)"
+    echo "  6) Cloudflare → SSL/TLS → Edge Certificates → Always Use HTTPS = ON"
+    exit 1
+  fi
 fi
 
-if ! sudo test -f "${LIVE}/fullchain.pem"; then
-  echo ""
-  echo "ERROR: Could not obtain a certificate for ${DOMAIN}."
-  echo "If Cloudflare proxy (orange cloud) blocks ACME:"
-  echo "  1) Cloudflare → DNS → crm.trackbook.co → set to DNS only (grey cloud) temporarily"
-  echo "  2) Re-run: bash scripts/fix-crm-ssl.sh"
-  echo "  3) Turn orange cloud back ON"
-  echo "  4) Cloudflare SSL/TLS mode = Full (strict)"
-  exit 1
-fi
+echo "=== 5) HTTPS vhost + force redirect ==="
+OPTS=""
+DH=""
+sudo test -f /etc/letsencrypt/options-ssl-nginx.conf && OPTS="include /etc/letsencrypt/options-ssl-nginx.conf;"
+sudo test -f /etc/letsencrypt/ssl-dhparams.pem && DH="ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;"
 
-echo "=== 5) Write final nginx config with CORRECT cert (${LIVE}) ==="
 sudo tee /etc/nginx/sites-available/crm.trackbook.co >/dev/null <<EOF
 map \$http_upgrade \$connection_upgrade_crm {
     default upgrade;
@@ -98,11 +106,13 @@ upstream amazon_crm_docker {
     keepalive 32;
 }
 
+# Force HTTPS
 server {
     listen 80;
     listen [::]:80;
     server_name ${DOMAIN};
-    return 301 https://\$host\$request_uri;
+    location /.well-known/acme-challenge/ { root /var/www/html; }
+    location / { return 301 https://\$host\$request_uri; }
 }
 
 server {
@@ -112,8 +122,10 @@ server {
 
     ssl_certificate     ${LIVE}/fullchain.pem;
     ssl_certificate_key ${LIVE}/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+    ${OPTS}
+    ${DH}
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
     client_max_body_size 50M;
 
@@ -132,25 +144,21 @@ server {
 }
 EOF
 
-# ssl-dhparams / options may be missing on some installs
-if ! sudo test -f /etc/letsencrypt/options-ssl-nginx.conf; then
-  sudo sed -i '/options-ssl-nginx.conf/d' /etc/nginx/sites-available/crm.trackbook.co
-fi
-if ! sudo test -f /etc/letsencrypt/ssl-dhparams.pem; then
-  sudo sed -i '/ssl-dhparams.pem/d' /etc/nginx/sites-available/crm.trackbook.co
-fi
-
-sudo ln -sf /etc/nginx/sites-available/crm.trackbook.co /etc/nginx/sites-enabled/crm.trackbook.co
-
-echo "=== 6) Reload nginx ==="
 sudo nginx -t
 sudo systemctl reload nginx
 
-echo "=== 7) Verify certificate name ==="
-echo | openssl s_client -servername "${DOMAIN}" -connect 127.0.0.1:443 2>/dev/null | openssl x509 -noout -subject -dates || true
+echo "=== 6) Verify ==="
+echo -n "HTTP redirect: "
+curl -sI -H "Host: ${DOMAIN}" http://127.0.0.1/ | head -n 1
+echo -n "Cert subject: "
+echo | openssl s_client -servername "${DOMAIN}" -connect 127.0.0.1:443 2>/dev/null | openssl x509 -noout -subject || true
+echo -n "HTTPS health: "
+curl -fsSk --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/api/health/" || curl -fsSk -H "Host: ${DOMAIN}" https://127.0.0.1/api/health/ || true
 echo ""
-curl -fsS "https://${DOMAIN}/api/health/" | head -c 200
 echo ""
-echo ""
-echo "Done. Open https://${DOMAIN} — padlock should be OK after hard refresh."
-echo "Cloudflare SSL/TLS should be: Full or Full (strict)."
+echo "DONE. In browser open exactly:"
+echo "  https://${DOMAIN}"
+echo "Then Cloudflare:"
+echo "  SSL/TLS mode = Full (strict)"
+echo "  Always Use HTTPS = ON"
+echo "Hard refresh: Ctrl+Shift+R"
