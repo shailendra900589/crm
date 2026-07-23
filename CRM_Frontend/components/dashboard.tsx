@@ -202,33 +202,31 @@ export function DashboardView() {
   }));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Hero welcome strip */}
-      <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-slate-900 via-slate-800 to-violet-900 p-6 text-white shadow-xl sm:p-8">
-        <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-violet-500/20 blur-3xl" />
-        <div className="absolute -bottom-8 left-1/3 h-32 w-32 rounded-full bg-blue-500/10 blur-3xl" />
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-5 text-white dark:border-slate-700 sm:p-6">
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium backdrop-blur">
-                <Sparkles className="h-3.5 w-3.5 text-violet-300" />
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200">
+                <Sparkles className="h-3 w-3 text-blue-300" />
                 Workdesk
               </span>
               {pulse && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-200">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-200">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                  Live updates
+                  Live
                 </span>
               )}
             </div>
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
               Welcome back, {me?.first_name || me?.username || "there"}
             </h2>
-            <p className="mt-2 max-w-xl text-sm text-slate-300">
-              {todayLabel} · {currentProject?.name || "Project"} pipeline overview
+            <p className="mt-1 text-sm text-slate-400">
+              {todayLabel} · {currentProject?.name || "Project"}
             </p>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-2.5">
             <QuickStatPill label="Confirmed" value={data.orders_confirmed} />
             <QuickStatPill label="Overdue" value={data.overdue_follow_ups} warn />
             <QuickStatPill label="Forms today" value={data.forms_filled_today} />
@@ -253,7 +251,7 @@ export function DashboardView() {
           title={data?.filter_summary?.project_name ? `${data.filter_summary.project_name} Performance` : "Performance Snapshot"}
           subtitle="Real-time metrics filtered by project, company & product"
         />
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Total Leads" value={data.total_leads} icon={Target} variant="slate" pulse={pulse} hint="In your scope" />
           <MetricCard label="Companies" value={data.total_companies ?? 0} icon={Factory} variant="blue" accent="text-blue-700" pulse={pulse} />
           <MetricCard label="Products" value={data.total_products ?? 0} icon={FileText} variant="violet" accent="text-violet-700" pulse={pulse} />
@@ -263,7 +261,7 @@ export function DashboardView() {
       </section>
 
       {(data.company_stats?.length || data.product_stats?.length) ? (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           {!!data.company_stats?.length && (
             <KpiTable title="Companies" rows={data.company_stats} columns={["name", "city", "lead_count", "confirmed_count", "conversion"]} />
           )}
@@ -273,98 +271,105 @@ export function DashboardView() {
         </div>
       ) : null}
 
-      <div className="grid gap-8 xl:grid-cols-3">
+      <div className="grid items-start gap-5 xl:grid-cols-3">
         {/* Main workdesk */}
-        <div className="space-y-6 xl:col-span-2">
+        <div className="space-y-5 xl:col-span-2">
+          <SectionHeading title="Onboarding Form" subtitle="Fill merchant details and complete the visit" />
+
           {data.project_form ? (
-            <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:shadow-none">
-              <div className="h-1 bg-gradient-to-r from-violet-600 via-violet-500 to-blue-500" />
-              <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-700 sm:px-8">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100 dark:bg-violet-500/15 dark:ring-1 dark:ring-violet-500/25">
-                      <FileText className="h-6 w-6 text-violet-600 dark:text-violet-300" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-50">{data.project_form.title}</h2>
-                      <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{data.project_form.project_name} · Assigned to your team</p>
-                    </div>
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+              {/* Form header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3.5 dark:border-slate-700 sm:px-5">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-500/15">
+                    <FileText className="h-4 w-4 text-blue-600 dark:text-blue-300" />
                   </div>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    Live Form
-                  </span>
+                  <div className="min-w-0">
+                    <h2 className="truncate text-[15px] font-bold text-slate-900 dark:text-slate-50">{data.project_form.title}</h2>
+                    <p className="truncate text-[12px] text-slate-500 dark:text-slate-400">{data.project_form.project_name}</p>
+                  </div>
                 </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Live
+                </span>
               </div>
 
-              <div className="divide-y divide-slate-100">
-                <div className="px-6 py-6 sm:px-8">
-                  <FormLabel>Select Lead / Merchant</FormLabel>
-                  <SearchableSelect
-                    value={selectedLead ? String(selectedLead) : ""}
-                    onChange={(val) => setSelectedLead(val ? Number(val) : null)}
-                    options={leadOptions}
-                    placeholder="Search merchant name or city..."
-                    searchPlaceholder="Type merchant name, city or lead #..."
-                    emptyText="No matching leads found"
-                  />
+              {/* Lead picker */}
+              <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-700 sm:px-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="min-w-0 flex-1">
+                    <FormLabel>Select Lead / Merchant</FormLabel>
+                    <SearchableSelect
+                      value={selectedLead ? String(selectedLead) : ""}
+                      onChange={(val) => setSelectedLead(val ? Number(val) : null)}
+                      options={leadOptions}
+                      placeholder="Search merchant name or city..."
+                      searchPlaceholder="Type merchant name, city or lead #..."
+                      emptyText="No matching leads found"
+                    />
+                  </div>
                   {selectedLeadInfo && (
-                    <div className="mt-4 flex items-center gap-4 rounded-2xl border border-violet-200/80 bg-violet-50/60 px-4 py-3.5 dark:border-violet-500/25 dark:bg-violet-500/10">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white ring-1 ring-violet-100 dark:bg-slate-900 dark:ring-violet-500/30">
-                        <MapPin className="h-5 w-5 text-violet-600 dark:text-violet-300" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-base font-bold text-slate-900 dark:text-slate-50">{selectedLeadInfo.merchant_name}</p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">{selectedLeadInfo.merchant_city} · Lead #{selectedLeadInfo.id}</p>
-                      </div>
-                      <span className="hidden rounded-lg bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700 dark:bg-violet-500/20 dark:text-violet-300 sm:inline">
-                        Selected
+                    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] dark:border-slate-600 dark:bg-slate-950/60 sm:mb-0.5">
+                      <span className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-200">
+                        <MapPin className="h-3 w-3 text-slate-400" />
+                        {selectedLeadInfo.merchant_city || "—"}
                       </span>
+                      <span className="text-slate-400">·</span>
+                      <span className="tabular-nums text-slate-500 dark:text-slate-400">#{selectedLeadInfo.id}</span>
+                      {selectedLeadInfo.status_display && (
+                        <>
+                          <span className="text-slate-400">·</span>
+                          <span className="text-slate-500 dark:text-slate-400">{selectedLeadInfo.status_display}</span>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
-
-                {selectedLead && (
-                  <>
-                    <div className="px-6 py-6 sm:px-8">
-                      <SectionDivider label="Form Details" />
-                      <DynamicForm schema={data.project_form.schema} values={formData} onChange={setFormData} leadId={selectedLead ?? undefined} />
-                    </div>
-
-                    <div className="border-t border-slate-200 bg-slate-50/50 px-6 py-6 dark:border-slate-700 dark:bg-slate-950/40 sm:px-8">
-                      <div className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                          <div className="flex-1">
-                            <FormLabel>Visit Remarks</FormLabel>
-                            <textarea
-                              className={formTextareaCls}
-                              rows={3}
-                              placeholder="Add notes from this visit — follow-up actions, merchant feedback, etc."
-                              value={remarks}
-                              onChange={(e) => setRemarks(e.target.value)}
-                            />
-                          </div>
-                          <Button
-                            onClick={() => submitForm.mutate()}
-                            disabled={submitForm.isPending}
-                            className="h-12 shrink-0 gap-2 rounded-xl bg-violet-600 px-8 text-sm font-semibold shadow-sm hover:bg-violet-700 lg:min-w-[240px]"
-                          >
-                            <Send className="h-4 w-4" />
-                            {submitForm.isPending ? "Submitting..." : "Submit & Complete"}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </>
-                )}
               </div>
+
+              {/* Fields + submit */}
+              {selectedLead ? (
+                <div className="px-4 py-4 sm:px-5 sm:py-5">
+                  <SectionDivider label="Form Details" />
+                  <DynamicForm
+                    schema={data.project_form.schema}
+                    values={formData}
+                    onChange={setFormData}
+                    leadId={selectedLead ?? undefined}
+                  />
+
+                  <div className="mt-5 space-y-3 border-t border-slate-200 pt-4 dark:border-slate-700">
+                    <FormLabel>Visit Remarks</FormLabel>
+                    <textarea
+                      className={formTextareaCls}
+                      rows={3}
+                      placeholder="Notes from this visit — follow-ups, feedback, next steps…"
+                      value={remarks}
+                      onChange={(e) => setRemarks(e.target.value)}
+                    />
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Button
+                        onClick={() => submitForm.mutate()}
+                        disabled={submitForm.isPending}
+                        className="h-10 gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold hover:bg-blue-700"
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        {submitForm.isPending ? "Submitting…" : "Submit & Complete"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="px-5 py-10 text-center text-sm text-slate-400">Select a lead to open the form.</p>
+              )}
             </div>
           ) : (
             <EmptyState
               icon={FileText}
               title="No form published yet"
               description="Your admin hasn't published a form for this project."
-              action={isSupervisor ? <Link href="/admin/forms" className="text-sm font-medium text-violet-600 hover:underline">Build form in Admin →</Link> : undefined}
+              action={isSupervisor ? <Link href="/admin/forms" className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-300">Build form in Admin →</Link> : undefined}
             />
           )}
 
@@ -372,9 +377,9 @@ export function DashboardView() {
             <Panel title="Assign Next Visit" icon={UserPlus} subtitle="Previously visited leads — schedule re-visit">
               <div className="space-y-2">
                 {data.revisit_leads.slice(0, 6).map((l) => (
-                  <div key={l.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3 transition hover:border-violet-200 hover:bg-violet-50/30">
+                  <div key={l.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 px-3.5 py-2.5 transition hover:border-blue-300 dark:border-slate-700 dark:hover:border-blue-500/40">
                     <div>
-                      <p className="font-semibold text-slate-900">{l.merchant_name}</p>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{l.merchant_name}</p>
                       <p className="text-xs text-slate-500">{l.merchant_city} · BDM: {l.bdm_name} · Last: {l.last_visit || "—"}</p>
                     </div>
                     <Button variant="outline" className="text-xs" onClick={() => { setAssignLead(l); setAssignTo(String(l.bdm_id)); }}>
@@ -388,14 +393,14 @@ export function DashboardView() {
 
           {isSupervisor && data.team_form_activity.length > 0 && (
             <Panel title="Team Form Activity Today" icon={Users}>
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {data.team_form_activity.map((s) => (
-                  <div key={s.id} className="flex items-center justify-between py-3 text-sm">
+                  <div key={s.id} className="flex items-center justify-between py-2.5 text-sm">
                     <div>
-                      <p className="font-medium text-slate-900">{s.lead_name}</p>
+                      <p className="font-medium text-slate-900 dark:text-slate-100">{s.lead_name}</p>
                       <p className="text-xs text-slate-500">by {s.submitted_by_name}</p>
                     </div>
-                    <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-500">
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                       {new Date(s.submitted_at).toLocaleTimeString()}
                     </span>
                   </div>
@@ -406,7 +411,7 @@ export function DashboardView() {
 
           <section>
             <SectionHeading title="Analytics" subtitle="Disposition breakdown and team performance" />
-            <div className="mt-4 grid gap-6 lg:grid-cols-2">
+            <div className="mt-3 grid gap-4 lg:grid-cols-2">
               <ChartCard title="Lead Disposition" subtitle="Status distribution across pipeline">
                 {disposition.length ? (
                   <ResponsiveContainer width="100%" height={220}>
@@ -429,7 +434,7 @@ export function DashboardView() {
                       <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
                       <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0" }} />
-                      <Bar dataKey="confirmed" fill="#7c3aed" radius={[8, 8, 0, 0]} />
+                      <Bar dataKey="confirmed" fill="#2563eb" radius={[8, 8, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -441,7 +446,7 @@ export function DashboardView() {
         </div>
 
         {/* Right sidebar */}
-        <div className="space-y-5">
+        <aside className="space-y-4 xl:sticky xl:top-20">
           <Panel title="Next Visit" icon={CalendarClock} featured>
             {data.next_visit ? (
               <button
@@ -449,21 +454,21 @@ export function DashboardView() {
                 onClick={() => setActiveVisit(data.next_visit)}
                 className="group w-full text-left"
               >
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 transition group-hover:border-violet-300 dark:border-slate-700 dark:bg-slate-950/60 dark:group-hover:border-violet-500/40">
-                  <p className="text-lg font-bold text-slate-900 dark:text-slate-50">{data.next_visit.lead_name}</p>
-                  <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400">
-                    <MapPin className="h-3.5 w-3.5 text-violet-500" />
+                <div className="rounded-xl border border-slate-200 p-3.5 transition group-hover:border-blue-400 dark:border-slate-700 dark:group-hover:border-blue-500/50">
+                  <p className="text-[15px] font-bold text-slate-900 dark:text-slate-50">{data.next_visit.lead_name}</p>
+                  <p className="mt-1 flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-slate-400">
+                    <MapPin className="h-3.5 w-3.5" />
                     {data.next_visit.merchant_city}
                   </p>
-                  <p className="mt-2 inline-flex rounded-lg bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+                  <p className="mt-2 inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                     {data.next_visit.scheduled_date}
                   </p>
                   {data.next_visit.remarks && (
-                    <p className="mt-3 rounded-xl border border-slate-200 bg-white p-2.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                    <p className="mt-2 line-clamp-2 text-[11px] text-slate-500 dark:text-slate-400">
                       {data.next_visit.remarks}
                     </p>
                   )}
-                  <span className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white transition group-hover:bg-violet-700">
+                  <span className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-[12px] font-semibold text-white transition group-hover:bg-blue-700">
                     Open Visit Form
                     <ArrowRight className="h-3.5 w-3.5" />
                   </span>
@@ -475,7 +480,7 @@ export function DashboardView() {
           </Panel>
 
           <Panel title="Upcoming Visits" icon={ClipboardCheck} badge={data.upcoming_visits.length}>
-            <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-64 space-y-1.5 overflow-y-auto pr-0.5">
               {data.upcoming_visits.length ? data.upcoming_visits.map((v) => (
                 <VisitRow key={v.id} visit={v} onSelect={() => setActiveVisit(v)} />
               )) : <EmptyMini icon={ClipboardCheck} text="No visits in queue" />}
@@ -483,14 +488,14 @@ export function DashboardView() {
           </Panel>
 
           <Panel title="Form History" icon={History}>
-            <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-64 space-y-1.5 overflow-y-auto pr-0.5">
               {data.recent_submissions.length ? data.recent_submissions.map((s) => (
-                <div key={s.id} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 transition hover:border-violet-100 hover:bg-violet-50/30">
+                <div key={s.id} className="rounded-lg border border-slate-200 px-3 py-2.5 dark:border-slate-700">
                   <div className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900">{s.lead_name}</p>
-                      <p className="text-xs text-slate-500">{s.submitted_by_name}</p>
+                      <p className="truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">{s.lead_name}</p>
+                      <p className="text-[11px] text-slate-500">{s.submitted_by_name}</p>
                       <p className="mt-0.5 text-[10px] text-slate-400">{new Date(s.submitted_at).toLocaleString()}</p>
                     </div>
                   </div>
@@ -499,17 +504,17 @@ export function DashboardView() {
             </div>
           </Panel>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Link href="/leads" className="flex items-center justify-center gap-2 rounded-2xl bg-violet-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700">
-              <Target className="h-4 w-4" />
+          <div className="grid grid-cols-2 gap-2">
+            <Link href="/leads" className="flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2.5 text-center text-[13px] font-semibold text-white transition hover:bg-blue-700">
+              <Target className="h-3.5 w-3.5" />
               All Leads
             </Link>
-            <Link href="/leads?overdue=1" className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:border-amber-300 hover:bg-amber-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-amber-500/40 dark:hover:bg-amber-500/10">
-              <Phone className="h-4 w-4 text-amber-600" />
+            <Link href="/leads?overdue=1" className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center text-[13px] font-semibold text-slate-700 transition hover:border-amber-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-amber-500/40">
+              <Phone className="h-3.5 w-3.5 text-amber-600" />
               Overdue
             </Link>
           </div>
-        </div>
+        </aside>
       </div>
 
       {/* Visit form modal */}
@@ -522,8 +527,8 @@ export function DashboardView() {
                   <h3 className="truncate text-lg font-bold text-slate-900 dark:text-slate-50">{activeVisit.lead_name}</h3>
                   <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
                     <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{activeVisit.merchant_city}</span>
-                    <span className="font-medium text-violet-600">{activeVisit.scheduled_date}</span>
-                    <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium capitalize text-violet-700">
+                    <span className="font-medium text-blue-600 dark:text-blue-300">{activeVisit.scheduled_date}</span>
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium capitalize text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
                       {activeVisit.visit_type.replace("_", " ")}
                     </span>
                   </p>
@@ -568,7 +573,7 @@ export function DashboardView() {
                 <Button
                   onClick={() => submitVisitModal.mutate()}
                   disabled={submitVisitModal.isPending}
-                  className="h-11 gap-2 bg-violet-600 hover:bg-violet-700"
+                  className="h-11 gap-2 bg-blue-600 hover:bg-blue-700"
                 >
                   <Send className="h-4 w-4" />
                   {submitVisitModal.isPending ? "Submitting..." : "Submit & Complete"}
@@ -606,7 +611,7 @@ export function DashboardView() {
               </div>
             </div>
             <div className="mt-5 flex gap-2">
-              <Button onClick={() => assignVisit.mutate()} disabled={!visitDate || assignVisit.isPending} className="bg-violet-600 hover:bg-violet-700">
+              <Button onClick={() => assignVisit.mutate()} disabled={!visitDate || assignVisit.isPending} className="bg-blue-600 hover:bg-blue-700">
                 {assignVisit.isPending ? "Assigning..." : "Assign Visit"}
               </Button>
               <Button variant="outline" onClick={() => setAssignLead(null)}>Cancel</Button>
@@ -629,9 +634,9 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 
 function SectionDivider({ label }: { label: string }) {
   return (
-    <div className="mb-5 flex items-center gap-3">
-      <span className="text-xs font-bold uppercase tracking-widest text-slate-400">{label}</span>
-      <div className="h-px flex-1 bg-slate-200" />
+    <div className="mb-4 flex items-center gap-3">
+      <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500">{label}</span>
+      <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
     </div>
   );
 }
@@ -660,34 +665,34 @@ function Panel({
 }) {
   return (
     <div className={cn(
-      "overflow-hidden rounded-2xl border bg-white shadow-sm dark:bg-slate-900 dark:shadow-none",
+      "overflow-hidden rounded-2xl border bg-white dark:bg-slate-900",
       featured
-        ? "border-violet-200/80 dark:border-violet-500/25"
+        ? "border-blue-200/80 dark:border-blue-500/25"
         : "border-slate-200 dark:border-slate-700",
     )}>
       <div className={cn(
-        "flex items-center gap-2 border-b px-4 py-3.5",
+        "flex items-center gap-2 border-b px-3.5 py-3",
         featured
-          ? "border-violet-200/80 dark:border-violet-500/20"
+          ? "border-blue-200/80 dark:border-blue-500/20"
           : "border-slate-200 dark:border-slate-700",
       )}>
         <div className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-lg",
+          "flex h-7 w-7 items-center justify-center rounded-md",
           featured
-            ? "bg-violet-100 dark:bg-violet-500/15"
+            ? "bg-blue-50 dark:bg-blue-500/15"
             : "bg-slate-100 dark:bg-slate-800",
         )}>
-          <Icon className={cn("h-4 w-4", featured ? "text-violet-600 dark:text-violet-300" : "text-slate-600 dark:text-slate-300")} />
+          <Icon className={cn("h-3.5 w-3.5", featured ? "text-blue-600 dark:text-blue-300" : "text-slate-600 dark:text-slate-300")} />
         </div>
-        <div className="flex-1">
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">{title}</h3>
-          {subtitle && <p className="text-[10px] text-slate-400">{subtitle}</p>}
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[13px] font-bold text-slate-800 dark:text-slate-100">{title}</h3>
+          {subtitle && <p className="truncate text-[10px] text-slate-400">{subtitle}</p>}
         </div>
         {badge !== undefined && (
-          <span className="rounded-full bg-violet-600 px-2.5 py-0.5 text-xs font-bold text-white">{badge}</span>
+          <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[11px] font-bold text-white">{badge}</span>
         )}
       </div>
-      <div className="p-4">{children}</div>
+      <div className="p-3.5">{children}</div>
     </div>
   );
 }
@@ -699,21 +704,21 @@ function VisitRow({ visit, onSelect }: { visit: LeadVisit; onSelect: () => void 
       type="button"
       onClick={onSelect}
       className={cn(
-        "group w-full rounded-xl border px-3.5 py-3 text-left transition",
+        "group w-full rounded-lg border px-3 py-2.5 text-left transition",
         isToday
-          ? "border-violet-300/70 bg-violet-50/40 hover:border-violet-400 dark:border-violet-500/35 dark:bg-violet-500/10 dark:hover:border-violet-400/50"
-          : "border-slate-200 bg-white hover:border-violet-300 dark:border-slate-700 dark:bg-slate-950/50 dark:hover:border-violet-500/30 dark:hover:bg-slate-800/50",
+          ? "border-blue-300/70 bg-blue-50/40 hover:border-blue-400 dark:border-blue-500/35 dark:bg-blue-500/10 dark:hover:border-blue-400/50"
+          : "border-slate-200 bg-white hover:border-blue-300 dark:border-slate-700 dark:bg-slate-950/50 dark:hover:border-blue-500/30",
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{visit.lead_name}</p>
+        <p className="truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">{visit.lead_name}</p>
         {isToday && (
-          <span className="shrink-0 rounded-md border border-violet-300/60 bg-transparent px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-700 dark:border-violet-400/40 dark:text-violet-300">
+          <span className="shrink-0 rounded border border-blue-300/60 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:border-blue-400/40 dark:text-blue-300">
             Today
           </span>
         )}
       </div>
-      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{visit.scheduled_date} · {visit.visit_type.replace("_", " ")}</p>
+      <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{visit.scheduled_date} · {visit.visit_type.replace("_", " ")}</p>
       {visit.remarks && <p className="mt-1 truncate text-[10px] text-slate-400">{visit.remarks}</p>}
     </button>
   );

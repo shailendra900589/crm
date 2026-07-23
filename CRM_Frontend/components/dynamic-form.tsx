@@ -15,38 +15,21 @@ import {
 } from "@/lib/form-fields";
 
 export const formInputCls =
-  "h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-50";
+  "h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400/50 dark:disabled:bg-slate-900";
 
 export const formTextareaCls =
-  "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-violet-400 focus:ring-2 focus:ring-violet-100 disabled:cursor-not-allowed disabled:bg-slate-50";
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-blue-400/50 dark:disabled:bg-slate-900";
 
 export function FormLabel({ children, required, help }: { children: React.ReactNode; required?: boolean; help?: string }) {
   return (
-    <div className="mb-2">
-      <label className="block text-sm font-semibold text-slate-700">
+    <div className="mb-1.5">
+      <label className="block text-[13px] font-semibold text-slate-700 dark:text-slate-300">
         {children}
         {required && <span className="text-rose-500"> *</span>}
       </label>
-      {help && <p className="mt-1 text-xs text-slate-500">{help}</p>}
+      {help && <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{help}</p>}
     </div>
   );
-}
-
-function isCompactField(type: string) {
-  return ["text", "number", "email", "phone", "url", "date", "time", "datetime", "dropdown"].includes(type);
-}
-
-function getFieldColSpan(field: FormField, schema: FormField[], layout: "grid" | "stack") {
-  if (layout !== "grid") return "";
-  if (isFullWidthField(field.type)) return "sm:col-span-2";
-
-  const compactFields = schema.filter((f) => isCompactField(f.type));
-  const compactIndex = compactFields.findIndex((f) => f.field_id === field.field_id);
-  const isLastCompact = compactIndex === compactFields.length - 1;
-  const hasOddCompactCount = compactFields.length % 2 === 1;
-
-  if (isLastCompact && hasOddCompactCount) return "sm:col-span-2";
-  return "";
 }
 
 export function DynamicForm({
@@ -66,7 +49,7 @@ export function DynamicForm({
 }) {
   if (!schema?.length) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-200 bg-white px-4 py-10 text-center">
+      <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center dark:border-slate-700">
         <p className="text-sm text-slate-400">No questions in this form yet.</p>
       </div>
     );
@@ -75,14 +58,11 @@ export function DynamicForm({
   const set = (id: string, val: unknown) => onChange({ ...values, [id]: val });
 
   return (
-    <div className={cn(layout === "grid" ? "grid grid-cols-1 gap-4 sm:grid-cols-2" : "space-y-4")}>
+    <div className={cn(layout === "grid" ? "grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2" : "space-y-4")}>
       {schema.map((f) => (
         <div
           key={f.field_id}
-          className={cn(
-            "rounded-xl border border-slate-100 bg-white p-4 shadow-sm",
-            getFieldColSpan(f, schema, layout)
-          )}
+          className={cn(layout === "grid" && isFullWidthField(f.type) && "sm:col-span-2")}
         >
           <FormLabel required={f.required} help={f.help_text}>{f.label}</FormLabel>
 
@@ -96,15 +76,15 @@ export function DynamicForm({
               options={(f.options || []).map((o) => ({ value: o, label: o }))}
             />
           ) : f.type === "radio" ? (
-            <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
               {(f.options || []).map((o) => (
                 <label
                   key={o}
                   className={cn(
-                    "flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition",
+                    "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
                     values[f.field_id] === o
-                      ? "border-violet-300 bg-violet-50 text-violet-900"
-                      : "border-slate-200 bg-slate-50/50 hover:border-violet-200"
+                      ? "border-blue-400 bg-blue-50 text-blue-900 dark:border-blue-400/50 dark:bg-blue-500/15 dark:text-blue-200"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300",
                   )}
                 >
                   <input
@@ -113,7 +93,7 @@ export function DynamicForm({
                     disabled={readOnly}
                     checked={values[f.field_id] === o}
                     onChange={() => set(f.field_id, o)}
-                    className="h-4 w-4 border-slate-300 text-violet-600 focus:ring-violet-500"
+                    className="h-3.5 w-3.5 border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="font-medium">{o}</span>
                 </label>
@@ -128,10 +108,10 @@ export function DynamicForm({
                   <label
                     key={o}
                     className={cn(
-                      "flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm transition",
+                      "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
                       checked
-                        ? "border-violet-300 bg-violet-50 text-violet-900"
-                        : "border-slate-200 bg-slate-50/50 text-slate-700 hover:border-violet-200 hover:bg-violet-50/40"
+                        ? "border-blue-400 bg-blue-50 text-blue-900 dark:border-blue-400/50 dark:bg-blue-500/15 dark:text-blue-200"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300",
                     )}
                   >
                     <input
@@ -142,7 +122,7 @@ export function DynamicForm({
                         const next = e.target.checked ? [...selected, o] : selected.filter((x) => x !== o);
                         set(f.field_id, next);
                       }}
-                      className="h-4 w-4 rounded border-slate-300 text-violet-600 focus:ring-violet-500"
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
                     <span className="font-medium">{o}</span>
                   </label>
@@ -152,7 +132,7 @@ export function DynamicForm({
           ) : f.type === "textarea" ? (
             <textarea
               className={formTextareaCls}
-              rows={4}
+              rows={3}
               disabled={readOnly}
               placeholder={getFieldPlaceholder(f)}
               value={String(values[f.field_id] || "")}
@@ -225,9 +205,9 @@ function FileUploadField({
   };
 
   return (
-    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-6 text-center">
+    <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-4 py-5 text-center dark:border-slate-600 dark:bg-slate-950/50">
       <UploadIcon />
-      <p className="mt-2 text-sm font-medium text-slate-600">Upload file</p>
+      <p className="mt-2 text-sm font-medium text-slate-600 dark:text-slate-300">Upload file</p>
       <p className="mt-0.5 text-xs text-slate-400">{config.hint} · max {maxMb}MB</p>
       {!readOnly && (
         <Input
@@ -241,13 +221,13 @@ function FileUploadField({
           }}
         />
       )}
-      {uploading && <p className="mt-2 text-xs font-medium text-indigo-600">Uploading to cloud storage...</p>}
+      {uploading && <p className="mt-2 text-xs font-medium text-blue-600 dark:text-blue-300">Uploading…</p>}
       {error && <p className="mt-2 text-xs text-rose-500">{error}</p>}
       {displayName && !uploading && (
         <div className="mt-3 space-y-1">
-          <p className="text-xs font-medium text-violet-600">{displayName}</p>
+          <p className="text-xs font-medium text-blue-600 dark:text-blue-300">{displayName}</p>
           {displayUrl && (
-            <a href={displayUrl} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline">
+            <a href={displayUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline dark:text-blue-300">
               View uploaded file
             </a>
           )}
@@ -259,7 +239,7 @@ function FileUploadField({
 
 function UploadIcon() {
   return (
-    <svg className="mx-auto h-8 w-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg className="mx-auto h-7 w-7 text-slate-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
     </svg>
   );
