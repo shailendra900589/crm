@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Button, Card, Input, Sheet, Tabs } from "@/components/ui";
+import { Badge, Button, Card, Input } from "@/components/ui";
 import { BulkUpload } from "@/components/bulk-upload";
 import { DocumentsPanel } from "@/components/documents-panel";
 import { DynamicForm } from "@/components/dynamic-form";
@@ -9,9 +9,10 @@ import { api, getProjectId, onProjectChange, LEAD_STATUSES, type CallOutcome, ty
 import { LogCallForm } from "@/components/log-call";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft, Calendar, Download, Eye, FileSpreadsheet, FileText, Filter, Pencil, PhoneCall, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowRightLeft, Calendar, Download, Eye, FileSpreadsheet, FileText, Filter, Pencil, Phone, PhoneCall, Plus, Search, Trash2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 type ModalMode = "add" | "edit" | "followup" | "reassign" | "call" | null;
 
@@ -509,7 +510,7 @@ export function LeadsView() {
       )}
       </>
       )}
-      <LeadSheet
+      <LeadDetailModal
         lead={selected}
         onClose={() => setSelected(null)}
         onEdit={openEdit}
@@ -691,7 +692,7 @@ export function LeadsView() {
   );
 }
 
-function LeadSheet({
+function LeadDetailModal({
   lead, onClose, onEdit, onFollowUp, onLogCall, onReassign,
 }: {
   lead: Lead | null;
@@ -735,74 +736,187 @@ function LeadSheet({
     if (l?.custom_data) setFormData(l.custom_data as Record<string, unknown>);
   }, [l]);
 
-  if (!l) return null;
+  useEffect(() => {
+    if (lead) setTab("profile");
+  }, [lead?.id]);
+
+  useEffect(() => {
+    if (!lead) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lead, onClose]);
+
+  if (!lead || !l) return null;
   const doc = l.documents?.[0];
+
+  const tabs = [
+    { id: "profile", label: "Profile" },
+    { id: "form", label: "Form" },
+    { id: "documents", label: "Docs" },
+    { id: "notes", label: "Activity" },
+  ] as const;
+
   return (
-    <Sheet open={!!lead} onClose={onClose} title={l.merchant_name}>
-      <div className="mb-4 flex flex-wrap gap-2">
-        <Button variant="outline" className="gap-1 text-xs" onClick={() => { onClose(); onFollowUp(l); }}>
-          <Phone className="h-3 w-3" /> Follow-up
-        </Button>
-        <Button variant="outline" className="gap-1 text-xs" onClick={() => { onClose(); onLogCall(l); }}>
-          <PhoneCall className="h-3 w-3" /> Log call
-        </Button>
-        {onReassign && (
-          <Button variant="outline" className="gap-1 text-xs" onClick={() => { onClose(); onReassign(l); }}>
-            <ArrowRightLeft className="h-3 w-3" /> Reassign
-          </Button>
-        )}
-        <Button variant="outline" className="gap-1 text-xs" onClick={() => { onClose(); onEdit(l); }}>
-          <Pencil className="h-3 w-3" /> Revise
-        </Button>
-      </div>
-
-      <Tabs
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { id: "profile", label: "Profile" },
-          { id: "form", label: "Custom Form" },
-          { id: "documents", label: "Documents" },
-          { id: "notes", label: "Activity" },
-        ]}      />
-
-      <div className="mt-6 space-y-4">
-        {tab === "profile" && (
-          <>
-            <Info label="BDM" value={l.bdm_name} />
-            <Info label="Product" value={l.product_name || "Not assigned"} />
-            <Info label="City" value={l.merchant_city} />
-            <Info label="Status" value={l.status_display} />
-            <Info label="Follow-up" value={l.follow_up_date || "Not set"} />
-          </>
-        )}
-
-        {tab === "form" && customForm && (
-          <div>
-            <DynamicForm schema={customForm.schema} values={formData} onChange={setFormData} leadId={l.id} />
-            <Button className="mt-3" onClick={() => submitForm.mutate()} disabled={submitForm.isPending}>
-              {submitForm.isPending ? "Saving..." : "Save Form"}
-            </Button>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="lead-detail-title"
+    >
+      <motion.button
+        type="button"
+        aria-label="Close backdrop"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm dark:bg-slate-950/70"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 16, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: "spring", stiffness: 380, damping: 28 }}
+        className="relative z-10 flex max-h-[min(90vh,880px)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/50"
+      >
+        {/* Header */}
+        <div className="shrink-0 border-b border-slate-100 bg-gradient-to-r from-blue-50 via-white to-white px-5 py-4 dark:border-slate-800 dark:from-blue-600/15 dark:via-slate-900 dark:to-slate-900 sm:px-6">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600/80 dark:text-blue-300/80">Lead detail</p>
+              <h2 id="lead-detail-title" className="mt-0.5 truncate text-xl font-bold text-slate-900 dark:text-white">
+                {l.merchant_name}
+              </h2>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge status={l.status} label={l.status_display} />
+                {l.product_name && (
+                  <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 ring-1 ring-slate-200/80 dark:bg-white/5 dark:text-slate-300 dark:ring-white/10">
+                    {l.product_name}
+                  </span>
+                )}
+                {l.merchant_city && (
+                  <span className="text-[12px] text-slate-500 dark:text-slate-400">{l.merchant_city}</span>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-        )}
 
-        {tab === "documents" && (
-          <DocumentsPanel
-            leadId={l.id}
-            doc={doc}
-            canVerify={!!me && (me.role === "Admin" || me.role === "TL" || me.role === "Manager")}
-          />
-        )}
-        {tab === "notes" && (
-          <LeadActivityTimeline leadId={l.id} />
-        )}
-      </div>
-    </Sheet>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <QuickAction icon={Phone} label="Follow-up" onClick={() => { onClose(); onFollowUp(l); }} />
+            <QuickAction icon={PhoneCall} label="Log call" onClick={() => { onClose(); onLogCall(l); }} />
+            {onReassign && (
+              <QuickAction icon={ArrowRightLeft} label="Reassign" onClick={() => { onClose(); onReassign(l); }} />
+            )}
+            <QuickAction icon={Pencil} label="Revise" onClick={() => { onClose(); onEdit(l); }} />
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="shrink-0 border-b border-slate-100 px-5 pt-3 dark:border-slate-800 sm:px-6">
+          <div className="flex gap-1 overflow-x-auto pb-px">
+            {tabs.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  "relative shrink-0 rounded-t-lg px-3.5 py-2 text-[13px] font-semibold transition",
+                  tab === t.id
+                    ? "text-blue-600 dark:text-blue-300"
+                    : "text-slate-400 hover:text-slate-700 dark:text-slate-500 dark:hover:text-slate-300",
+                )}
+              >
+                {t.label}
+                {tab === t.id && (
+                  <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-blue-500 dark:bg-blue-400" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+          {tab === "profile" && (
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-0 sm:grid-cols-2">
+              <ProfileField label="BDM" value={l.bdm_name} />
+              <ProfileField label="Product" value={l.product_name || "Not assigned"} />
+              <ProfileField label="City" value={l.merchant_city || "—"} />
+              <ProfileField label="Status" value={l.status_display} />
+              <ProfileField label="Follow-up" value={l.follow_up_date || "Not set"} />
+              <ProfileField label="Mobile" value={l.merchant_mobile || "—"} />
+              {l.brand_name ? <ProfileField label="Brand" value={l.brand_name} /> : null}
+              {l.merchant_email ? <ProfileField label="Email" value={l.merchant_email} /> : null}
+            </dl>
+          )}
+
+          {tab === "form" && customForm && (
+            <div>
+              <DynamicForm schema={customForm.schema} values={formData} onChange={setFormData} leadId={l.id} />
+              <Button className="mt-4" onClick={() => submitForm.mutate()} disabled={submitForm.isPending}>
+                {submitForm.isPending ? "Saving..." : "Save Form"}
+              </Button>
+            </div>
+          )}
+
+          {tab === "form" && !customForm && (
+            <p className="text-sm text-slate-500">No custom form configured for this project.</p>
+          )}
+
+          {tab === "documents" && (
+            <DocumentsPanel
+              leadId={l.id}
+              doc={doc}
+              canVerify={!!me && (me.role === "Admin" || me.role === "TL" || me.role === "Manager")}
+            />
+          )}
+          {tab === "notes" && <LeadActivityTimeline leadId={l.id} />}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function QuickAction({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[12px] font-semibold text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-600 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:border-blue-400/40 dark:hover:bg-blue-500/15 dark:hover:text-blue-200"
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </button>
+  );
+}
+
+function ProfileField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-slate-100 py-3 dark:border-white/[0.06]">
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">{label}</dt>
+      <dd className="mt-1 text-sm font-medium text-slate-900 dark:text-slate-100">{value}</dd>
+    </div>
   );
 }
 
 function ActionBtn({ icon: Icon, title, onClick, danger }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   title: string;
   onClick: () => void;
   danger?: boolean;
@@ -823,10 +937,10 @@ function ActionBtn({ icon: Icon, title, onClick, danger }: {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-slate-600">{label}</label>
+      <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400">{label}</label>
       {children}
     </div>
   );
@@ -839,15 +953,6 @@ function ModalActions({ onCancel, onSave, saving, label, disabled }: {
     <div className="flex gap-2 pt-2">
       <Button onClick={onSave} disabled={saving || disabled}>{saving ? "Saving..." : label}</Button>
       <Button variant="outline" onClick={onCancel}>Cancel</Button>
-    </div>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex justify-between rounded-xl bg-slate-50 px-4 py-3">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className="text-sm font-medium text-slate-900">{value}</span>
     </div>
   );
 }
