@@ -58,32 +58,36 @@ Switching to MongoDB would mean rewriting the backend — **do not do that for g
 - Proxy: **ON** (orange cloud)
 - SSL/TLS mode: **Full** (not Flexible if origin is HTTP-only behind Cloudflare Full is OK with HTTP origin on port 80)
 
-### 3) SSH and install Docker
+### 3) SSH, clone, install Docker + Compose plugin
 
 ```bash
 ssh -i your-key.pem ubuntu@YOUR_ELASTIC_IP
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker ubuntu
-# log out and back in
-docker --version
-```
 
-Or run the bootstrap script from this repo after clone:
-
-```bash
-sudo bash scripts/aws-ec2-bootstrap.sh
-```
-
-### 4) Clone and configure
-
-```bash
 git clone https://github.com/shailendra900589/crm.git
 cd crm
-cp .env.prod.example .env.prod
-nano .env.prod
+sudo bash scripts/aws-ec2-bootstrap.sh
+# log out/in once, or: newgrp docker
+
+docker compose version   # must print v2.x — NOT "unknown shorthand flag: f"
 ```
 
-Set at least:
+If you see `unknown shorthand flag: 'f'`, Compose plugin is missing:
+
+```bash
+sudo apt-get update && sudo apt-get install -y docker-compose-plugin
+# or: cd ~/crm && sudo bash scripts/aws-ec2-bootstrap.sh
+docker compose version
+```
+
+### 4) Configure env
+
+```bash
+cd ~/crm
+bash scripts/make-env-prod.sh
+# or: cp .env.prod.example .env.prod && nano .env.prod
+```
+
+Set at least (if editing manually):
 
 ```env
 SECRET_KEY=<long-random-string>
