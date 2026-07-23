@@ -1191,8 +1191,16 @@ class LeadViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"])
     def pipeline(self, request):
         """Board data: leads grouped by status (capped for UI)."""
-        qs = self.get_queryset()[:400]
-        columns = {key: [] for key, _ in Lead.Status.choices}
+        # Stable board column order (matches frontend LEAD_STATUSES)
+        status_order = [
+            Lead.Status.INTERESTED,
+            Lead.Status.FOLLOW_UP,
+            Lead.Status.CALLBACK,
+            Lead.Status.ORDER_CONFIRMED,
+            Lead.Status.NOT_INTERESTED,
+        ]
+        columns = {key: [] for key in status_order}
+        qs = self.get_queryset()[:500]
         for lead in qs:
             columns.setdefault(lead.status, []).append(LeadSerializer(lead).data)
         counts = {k: len(v) for k, v in columns.items()}
