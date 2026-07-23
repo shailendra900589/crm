@@ -1,27 +1,33 @@
 /**
  * API / WS base URLs.
- * - Local dev: defaults to :8000
- * - Production (nginx): build with NEXT_PUBLIC_API_URL="" and NEXT_PUBLIC_WS_URL="" for same-origin
+ * - Local dev: http://127.0.0.1:8000
+ * - Production (Docker/nginx): NEXT_PUBLIC_API_URL=same-origin → browser calls /api on crm.trackbook.co
  */
-function envOr(name: string, fallback: string): string {
-  const v = process.env[name];
-  if (v === undefined || v === null) return fallback;
-  return v; // allow empty string for same-origin
+function resolveApiBase(): string {
+  const raw = (process.env.NEXT_PUBLIC_API_URL || "").trim();
+  if (raw === "same-origin" || raw === "/") return "";
+  if (raw) return raw.replace(/\/$/, "");
+  // Safety: never call the user's localhost when the app is opened on a real host
+  if (typeof window !== "undefined") {
+    const h = window.location.hostname;
+    if (h && h !== "localhost" && h !== "127.0.0.1") return "";
+  }
+  return "http://127.0.0.1:8000";
 }
 
-const API = envOr("NEXT_PUBLIC_API_URL", "http://127.0.0.1:8000");
+const API = resolveApiBase();
 
 export function getWsUrl(): string {
-  const configured = process.env.NEXT_PUBLIC_WS_URL;
-  if (configured) return configured;
-  // Empty string (prod same-origin) or empty API base → derive from browser location
-  if (configured === "" || API === "") {
-    if (typeof window !== "undefined") {
-      const proto = window.location.protocol === "https:" ? "wss" : "ws";
+  const raw = (process.env.NEXT_PUBLIC_WS_URL || "").trim();
+  if (raw && raw !== "same-origin") return raw.replace(/\/$/, "");
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    // same-origin or empty → use current host (crm.trackbook.co)
+    if (!raw || raw === "same-origin" || API === "") {
       return `${proto}://${window.location.host}`;
     }
-    return "";
   }
+  if (API === "") return "";
   return "ws://127.0.0.1:8000";
 }
 

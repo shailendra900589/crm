@@ -10,9 +10,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN mkdir -p public
 
-# Same-origin behind nginx: empty API base → browser uses /api and /ws
-ARG NEXT_PUBLIC_API_URL=
-ARG NEXT_PUBLIC_WS_URL=
+# Same-origin behind nginx (crm.trackbook.co/api → Django). Do NOT use 127.0.0.1 here.
+ARG NEXT_PUBLIC_API_URL=same-origin
+ARG NEXT_PUBLIC_WS_URL=same-origin
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_TELEMETRY_DISABLED=1
