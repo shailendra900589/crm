@@ -307,11 +307,19 @@ def discover_money_fields(project_ids=None):
 
     qs = CustomForm.objects.all()
     if project_ids is not None:
-        qs = qs.filter(project_id__in=list(project_ids) or [-1])
+        ids = [int(x) for x in project_ids if x is not None and str(x).strip() != ""]
+        qs = qs.filter(project_id__in=ids or [-1])
 
     mapping = {}
     for form in qs.only("schema"):
-        for field in form.schema or []:
+        schema = form.schema or []
+        if isinstance(schema, str):
+            continue
+        if not isinstance(schema, list):
+            continue
+        for field in schema:
+            if not isinstance(field, dict):
+                continue
             fid = field.get("field_id")
             role = field.get("metric_role")
             ftype = field.get("type", "text")
@@ -327,7 +335,6 @@ def discover_money_fields(project_ids=None):
 
 def aggregate_money_metrics(leads_qs, project_ids=None):
     """Sum tagged amount fields from lead.custom_data for dashboard KPIs."""
-    mapping = discover_money_fields(project_ids)
     empty = {
         "has_money": False,
         "metrics": [],
@@ -335,46 +342,52 @@ def aggregate_money_metrics(leads_qs, project_ids=None):
         "total_pending": 0,
         "total_deal_value": 0,
     }
-    if not mapping:
-        return empty
+    try:
+        mapping = discover_money_fields(project_ids)
+        if not mapping:
+            return empty
 
-    totals = {}
-    labels = {}
-    currencies = {}
-    for meta in mapping.values():
-        role = meta["role"]
-        totals.setdefault(role, 0.0)
-        labels.setdefault(role, meta["label"])
-        currencies.setdefault(role, meta["currency"])
+        totals = {}
+        labels = {}
+        currencies = {}
+        for meta in mapping.values():
+            role = meta["role"]
+            totals.setdefault(role, 0.0)
+            labels.setdefault(role, meta["label"])
+            currencies.setdefault(role, meta["currency"])
 
-    for lead in leads_qs.only("custom_data").iterator(chunk_size=500):
-        data = lead.custom_data or {}
-        if not isinstance(data, dict):
-            continue
-        for fid, meta in mapping.items():
-            raw = data.get(fid)
-            if raw is None or raw == "":
+        # Use values() — avoids FieldError when leads_qs already has select_related()
+        for row in leads_qs.values("custom_data").iterator(chunk_size=500):
+            data = row.get("custom_data") or {}
+            if not isinstance(data, dict):
                 continue
-            try:
-                totals[meta["role"]] += float(raw)
-            except (TypeError, ValueError):
-                continue
+            for fid, meta in mapping.items():
+                raw = data.get(fid)
+                if raw is None or raw == "":
+                    continue
+                try:
+                    totals[meta["role"]] += float(raw)
+                except (TypeError, ValueError):
+                    continue
 
-    metrics = [
-        {
-            "role": role,
-            "label": labels.get(role, ROLE_LABELS.get(role, role)),
-            "total": round(total, 2),
-            "currency": currencies.get(role, "INR"),
+        metrics = [
+            {
+                "role": role,
+                "label": labels.get(role, ROLE_LABELS.get(role, role)),
+                "total": round(total, 2),
+                "currency": currencies.get(role, "INR"),
+            }
+            for role, total in totals.items()
+        ]
+        metrics.sort(key=lambda m: {"pending_amount": 0, "collection": 1, "deal_value": 2}.get(m["role"], 9))
+
+        return {
+            "has_money": True,
+            "metrics": metrics,
+            "total_collection": round(totals.get("collection", 0), 2),
+            "total_pending": round(totals.get("pending_amount", 0), 2),
+            "total_deal_value": round(totals.get("deal_value", 0), 2),
         }
-        for role, total in totals.items()
-    ]
-    metrics.sort(key=lambda m: {"pending_amount": 0, "collection": 1, "deal_value": 2}.get(m["role"], 9))
-
-    return {
-        "has_money": True,
-        "metrics": metrics,
-        "total_collection": round(totals.get("collection", 0), 2),
-        "total_pending": round(totals.get("pending_amount", 0), 2),
-        "total_deal_value": round(totals.get("deal_value", 0), 2),
-    }
+    except Exception:
+        # Never take down dashboard / admin console for money rollups
+        return empty

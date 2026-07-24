@@ -442,7 +442,16 @@ class DashboardView(APIView):
         pids = [int(project_filter)] if project_filter else list(
             leads.values_list("project_id", flat=True).distinct()
         )
-        data["money_metrics"] = aggregate_money_metrics(leads, project_ids=pids)
+        try:
+            data["money_metrics"] = aggregate_money_metrics(leads, project_ids=pids)
+        except Exception:
+            data["money_metrics"] = {
+                "has_money": False,
+                "metrics": [],
+                "total_collection": 0,
+                "total_pending": 0,
+                "total_deal_value": 0,
+            }
         return Response(data)
 
     @staticmethod
@@ -785,12 +794,21 @@ class AdminDashboardView(APIView):
                 "to": request.query_params.get("to"),
             },
         }
-        payload["money_metrics"] = aggregate_money_metrics(
-            all_leads,
-            project_ids=[int(project_filter)] if project_filter else list(
-                all_leads.values_list("project_id", flat=True).distinct()
-            ),
-        )
+        try:
+            pids = (
+                [int(project_filter)]
+                if project_filter
+                else list(all_leads.values_list("project_id", flat=True).distinct())
+            )
+            payload["money_metrics"] = aggregate_money_metrics(all_leads, project_ids=pids)
+        except Exception:
+            payload["money_metrics"] = {
+                "has_money": False,
+                "metrics": [],
+                "total_collection": 0,
+                "total_pending": 0,
+                "total_deal_value": 0,
+            }
         return Response(payload)
 
 
