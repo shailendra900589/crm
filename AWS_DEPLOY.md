@@ -5,9 +5,10 @@
 | URL | Served by |
 |-----|-----------|
 | `https://crm.trackbook.co/` | Next.js frontend |
+| `https://crm.trackbook.co/admin/` | CRM Admin UI (Next.js) |
 | `https://crm.trackbook.co/api/...` | Django API |
 | `https://crm.trackbook.co/ws/...` | WebSockets |
-| `https://crm.trackbook.co/admin/` | Django admin |
+| `https://crm.trackbook.co/django-admin/` | Django built-in admin (rare) |
 | `https://crm.trackbook.co/media/...` | Uploads |
 
 **Do not** host frontend and backend on different domains unless you must. Same domain = no CORS pain, simpler cookies/JWT usage, one SSL cert, one DNS record.
