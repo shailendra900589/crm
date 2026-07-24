@@ -23,6 +23,11 @@ class Command(BaseCommand):
             username="admin",
             defaults={"role": User.Role.ADMIN, "first_name": "Admin", "email": "admin@crm.local"},
         )
+        admin.role = User.Role.ADMIN
+        admin.is_active = True
+        admin.is_active_user = True
+        admin.is_staff = True
+        admin.is_superuser = True
         admin.set_password("password123")
         admin.save()
 
@@ -30,6 +35,9 @@ class Command(BaseCommand):
             username="manager",
             defaults={"role": User.Role.MANAGER, "first_name": "Raj", "reports_to": admin, "email": "manager@crm.local"},
         )
+        manager.role = User.Role.MANAGER
+        manager.is_active = True
+        manager.is_active_user = True
         manager.set_password("password123")
         manager.save()
 
@@ -37,6 +45,9 @@ class Command(BaseCommand):
             username="tl",
             defaults={"role": User.Role.TL, "first_name": "Priya", "reports_to": manager, "email": "tl@crm.local"},
         )
+        tl.role = User.Role.TL
+        tl.is_active = True
+        tl.is_active_user = True
         tl.set_password("password123")
         tl.save()
 
@@ -44,6 +55,9 @@ class Command(BaseCommand):
             username="bdm",
             defaults={"role": User.Role.BDM, "first_name": "Amit", "reports_to": tl, "email": "bdm@crm.local"},
         )
+        bdm.role = User.Role.BDM
+        bdm.is_active = True
+        bdm.is_active_user = True
         bdm.set_password("password123")
         bdm.save()
 

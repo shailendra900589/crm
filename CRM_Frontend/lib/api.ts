@@ -139,7 +139,15 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Request failed");
+    const detail = err.detail;
+    const msg = Array.isArray(detail)
+      ? detail.map((d: { message?: string } | string) => (typeof d === "string" ? d : d.message || "")).filter(Boolean).join(", ")
+      : typeof detail === "string"
+        ? detail
+        : detail && typeof detail === "object"
+          ? JSON.stringify(detail)
+          : err.message || "Request failed";
+    throw new Error(msg || "Request failed");
   }
   if (res.status === 204) return undefined as T;
   return res.json();
