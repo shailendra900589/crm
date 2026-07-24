@@ -68,8 +68,12 @@ export function DashboardFilters({
             <Filter className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Using Filters</h3>
-            <p className="text-xs text-slate-500">Project-wise companies & products KPIs</p>
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+              {allowAllProjects ? "Org scope" : "Using Filters"}
+            </h3>
+            <p className="text-xs text-slate-500">
+              {allowAllProjects ? "Default: all projects — narrow when needed" : "Project-wise companies & products KPIs"}
+            </p>
           </div>
           {activeCount > 0 && (
             <span className="rounded-full bg-indigo-600 px-2.5 py-0.5 text-xs font-bold text-white">

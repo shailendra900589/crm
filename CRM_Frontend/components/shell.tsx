@@ -223,11 +223,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
     profile: "Profile",
   };
 
-  const showProjectSwitcher = role !== "Admin" || (projects && projects.length > 0);
+  /** Admin uses org filters on the dashboard — no forced project chip in the chrome */
+  const showProjectSwitcher = role !== "Admin";
+  const isAdminSurface = role === "Admin" && pathname.startsWith("/admin");
 
   return (
     <LiveSyncProvider scope={liveScopeForRole(user?.role)}>
-      <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
+      <div className={cn("flex min-h-screen", isAdminSurface ? "bg-slate-950" : "bg-slate-50 dark:bg-slate-950")}>
         {mobileOpen && (
           <button
             type="button"
@@ -247,7 +249,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/70">{themeCfg.eyebrow}</p>
             <p className="mt-1 text-lg font-bold tracking-tight">{themeCfg.brand}</p>
             {role === "Admin" ? (
-              <p className="mt-2 text-xs text-white/70">Full organization control</p>
+              <p className="mt-2 text-xs text-white/70">Full organization control · all projects</p>
             ) : (
               <>
                 <p className="mt-2 truncate text-sm font-medium text-white/90">{current?.name || "Select project"}</p>
@@ -265,19 +267,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   </select>
                 )}
               </>
-            )}
-            {role === "Admin" && projects && projects.length > 0 && (
-              <select
-                value={activeProject}
-                onChange={(e) => switchProject(e.target.value)}
-                className="mt-3 w-full rounded-xl border-0 bg-white/15 px-3 py-2 text-sm font-medium text-white backdrop-blur [&>option]:text-slate-900"
-              >
-                {projects.filter((p) => p.is_active).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    Scope: {p.name}
-                  </option>
-                ))}
-              </select>
             )}
           </div>
 
@@ -328,7 +317,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </aside>
 
         <main className="flex-1 lg:ml-64">
-          <header className="sticky top-0 z-10 border-b border-slate-200/80 bg-white/80 px-4 py-4 shadow-sm backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/80 sm:px-6 sm:py-5 lg:px-8">
+          <header
+            className={cn(
+              "sticky top-0 z-10 border-b px-4 py-4 shadow-sm backdrop-blur-md sm:px-6 sm:py-5 lg:px-8",
+              isAdminSurface
+                ? "border-slate-800 bg-slate-950/90"
+                : "border-slate-200/80 bg-white/80 dark:border-slate-800 dark:bg-slate-900/80",
+            )}
+          >
             <div className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <button
@@ -340,10 +336,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
                 </button>
                 <div className="min-w-0 shrink">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-400">
+                  <p
+                    className={cn(
+                      "text-[11px] font-semibold uppercase tracking-[0.15em]",
+                      isAdminSurface ? "text-sky-400/80" : "text-slate-400",
+                    )}
+                  >
                     {themeCfg.eyebrow}
                   </p>
-                  <h1 className="truncate text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-slate-50">
+                  <h1
+                    className={cn(
+                      "truncate text-xl font-bold tracking-tight sm:text-2xl",
+                      isAdminSurface ? "text-white" : "text-slate-900 dark:text-slate-50",
+                    )}
+                  >
                     {pageTitle[titleKey] || titleKey}
                   </h1>
                 </div>
@@ -366,7 +372,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                       value={activeProject}
                       onChange={(e) => switchProject(e.target.value)}
                       className="h-9 max-w-[140px] appearance-none rounded-full border-0 py-1.5 pl-3 pr-8 text-xs font-semibold text-white shadow-sm outline-none ring-0 sm:max-w-[180px]"
-                      style={{ backgroundColor: role === "Admin" ? "#334155" : current?.color || "#4f46e5" }}
+                      style={{ backgroundColor: current?.color || "#4f46e5" }}
                     >
                       {projects.filter((p) => p.is_active).map((p) => (
                         <option key={p.id} value={p.id} className="text-slate-900">
