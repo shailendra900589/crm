@@ -12,6 +12,24 @@ DEFAULT_FORM = [
     {"field_id": "gst_number", "label": "GST Number", "type": "text", "required": True},
     {"field_id": "business_type", "label": "Business Type", "type": "dropdown", "required": True, "options": ["Retail", "Wholesale", "Manufacturer"]},
     {"field_id": "annual_revenue", "label": "Annual Revenue", "type": "number", "required": False},
+    {
+        "field_id": "amount_collected",
+        "label": "Amount Collected",
+        "type": "currency",
+        "required": False,
+        "currency": "INR",
+        "metric_role": "collection",
+        "min": 0,
+    },
+    {
+        "field_id": "pending_amount",
+        "label": "Collection Pending Amount",
+        "type": "currency",
+        "required": False,
+        "currency": "INR",
+        "metric_role": "pending_amount",
+        "min": 0,
+    },
 ]
 
 
@@ -80,10 +98,19 @@ class Command(BaseCommand):
                     slug=slugify(pname),
                     defaults={"name": pname, "description": f"{pname} for {name}"},
                 )
-            CustomForm.objects.get_or_create(
+            form, created = CustomForm.objects.get_or_create(
                 project=project,
                 defaults={"title": f"{name} Onboarding Form", "schema": DEFAULT_FORM, "created_by": admin},
             )
+            if not created:
+                # Keep title; refresh schema so new money KPI fields are available
+                existing_ids = {f.get("field_id") for f in (form.schema or [])}
+                merged = list(form.schema or [])
+                for field in DEFAULT_FORM:
+                    if field["field_id"] not in existing_ids:
+                        merged.append(field)
+                form.schema = merged or DEFAULT_FORM
+                form.save(update_fields=["schema"])
             team, _ = Team.objects.get_or_create(
                 project=project, manager=manager,
                 defaults={"name": f"{name} Sales Team"},

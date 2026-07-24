@@ -1,4 +1,4 @@
-import type { FormField, FormFieldType } from "@/lib/api";
+import type { FormField, FormFieldType, FormMetricRole } from "@/lib/api";
 
 export const FILE_ACCEPT_PRESETS = {
   pdf: {
@@ -47,6 +47,13 @@ export const FILE_ACCEPT_PRESETS = {
 
 export type FileAcceptPreset = keyof typeof FILE_ACCEPT_PRESETS;
 
+export const METRIC_ROLE_OPTIONS: { value: FormMetricRole | ""; label: string; hint: string }[] = [
+  { value: "", label: "None — capture only", hint: "Saved on the lead, not rolled up on dashboards" },
+  { value: "collection", label: "Amount collected", hint: "Sums into Collection KPI" },
+  { value: "pending_amount", label: "Collection pending", hint: "Sums into Pending Amount KPI" },
+  { value: "deal_value", label: "Deal / order value", hint: "Sums into Deal Value KPI" },
+];
+
 export function getFileAcceptConfig(field: FormField) {
   const key = (field.file_accept || "any") as FileAcceptPreset;
   return FILE_ACCEPT_PRESETS[key] || FILE_ACCEPT_PRESETS.any;
@@ -63,8 +70,9 @@ export function getFieldPlaceholder(field: FormField) {
       return "https://example.com";
     case "number":
       return "Enter a number";
+    case "currency":
+      return "0.00";
     case "date":
-      return "";
     case "time":
       return "";
     default:
@@ -81,6 +89,7 @@ export function getInputType(field: FormField): string {
     case "url":
       return "url";
     case "number":
+    case "currency":
       return "number";
     case "date":
       return "date";
@@ -97,8 +106,20 @@ export function isOptionField(type: string) {
   return type === "dropdown" || type === "radio" || type === "multiselect";
 }
 
+export function isMoneyField(type: string) {
+  return type === "currency" || type === "number";
+}
+
 export function isFullWidthField(type: string) {
   return type === "textarea" || type === "multiselect" || type === "file" || type === "radio";
+}
+
+export function formatINR(amount: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
+  }).format(amount || 0);
 }
 
 export function defaultField(type: FormFieldType | string): FormField {
@@ -106,6 +127,7 @@ export function defaultField(type: FormFieldType | string): FormField {
     text: "Short answer",
     textarea: "Paragraph",
     number: "Number",
+    currency: "Amount (₹)",
     email: "Email",
     phone: "Phone number",
     url: "Website URL",
@@ -118,7 +140,7 @@ export function defaultField(type: FormFieldType | string): FormField {
     file: "File upload",
   };
 
-  return {
+  const base: FormField = {
     field_id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     label: labels[type] || "Question",
     type,
@@ -127,22 +149,32 @@ export function defaultField(type: FormFieldType | string): FormField {
     file_accept: type === "file" ? "pdf" : undefined,
     max_file_mb: type === "file" ? 10 : undefined,
   };
+
+  if (type === "currency") {
+    base.currency = "INR";
+    base.metric_role = "pending_amount";
+    base.label = "Collection Pending Amount";
+    base.min = 0;
+  }
+
+  return base;
 }
 
-export const FIELD_TYPE_OPTIONS: { type: FormFieldType; label: string }[] = [
-  { type: "text", label: "Short answer" },
-  { type: "textarea", label: "Paragraph" },
-  { type: "number", label: "Number" },
-  { type: "email", label: "Email" },
-  { type: "phone", label: "Phone" },
-  { type: "url", label: "Website / URL" },
-  { type: "date", label: "Date" },
-  { type: "time", label: "Time" },
-  { type: "datetime", label: "Date & time" },
-  { type: "dropdown", label: "Dropdown" },
-  { type: "radio", label: "Multiple choice" },
-  { type: "multiselect", label: "Checkboxes" },
-  { type: "file", label: "File upload" },
+export const FIELD_TYPE_OPTIONS: { type: FormFieldType; label: string; group: string }[] = [
+  { type: "text", label: "Short answer", group: "Text" },
+  { type: "textarea", label: "Paragraph", group: "Text" },
+  { type: "email", label: "Email", group: "Text" },
+  { type: "phone", label: "Phone", group: "Text" },
+  { type: "url", label: "Website / URL", group: "Text" },
+  { type: "number", label: "Number", group: "Numbers" },
+  { type: "currency", label: "Amount (₹)", group: "Numbers" },
+  { type: "date", label: "Date", group: "Date & time" },
+  { type: "time", label: "Time", group: "Date & time" },
+  { type: "datetime", label: "Date & time", group: "Date & time" },
+  { type: "dropdown", label: "Dropdown", group: "Choice" },
+  { type: "radio", label: "Multiple choice", group: "Choice" },
+  { type: "multiselect", label: "Checkboxes", group: "Choice" },
+  { type: "file", label: "File upload", group: "Files" },
 ];
 
 export function validateFileSelection(filename: string, field: FormField): string | null {

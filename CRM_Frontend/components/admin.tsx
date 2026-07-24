@@ -17,6 +17,7 @@ import {
   FileText,
   FolderKanban,
   History,
+  IndianRupee,
   Mail,
   Shield,
   TrendingUp,
@@ -37,6 +38,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { formatINR } from "@/lib/form-fields";
 
 const STATUS_LABELS: Record<string, string> = {
   order_confirmed: "Order Confirmed",
@@ -126,13 +128,34 @@ export function AdminPanel() {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
           <KpiTile label="Projects" value={stats?.active_projects ?? "—"} loading={statsLoading} />
           <KpiTile label="Managers" value={managers?.length ?? "—"} loading={!managers} />
           <KpiTile label="BDMs" value={stats?.total_bdm ?? "—"} loading={statsLoading} />
           <KpiTile label="Leads" value={stats?.total_leads ?? "—"} loading={statsLoading} />
           <KpiTile label="Confirmed" value={stats?.orders_confirmed ?? "—"} loading={statsLoading} accent="text-emerald-300" />
           <KpiTile label="Conversion" value={stats ? `${stats.conversion_rate}%` : "—"} loading={statsLoading} accent="text-sky-300" />
+          {stats?.money_metrics?.has_money ? (
+            <>
+              <KpiTile
+                label="Pending ₹"
+                value={formatINR(stats.money_metrics.total_pending)}
+                loading={statsLoading}
+                accent="text-amber-300"
+              />
+              <KpiTile
+                label="Collected ₹"
+                value={formatINR(stats.money_metrics.total_collection)}
+                loading={statsLoading}
+                accent="text-emerald-300"
+              />
+            </>
+          ) : (
+            <>
+              <KpiTile label="Follow-ups" value={stats?.follow_ups_due_today ?? "—"} loading={statsLoading} accent="text-amber-300" />
+              <KpiTile label="Overdue" value={stats?.overdue_follow_ups ?? "—"} loading={statsLoading} accent="text-rose-300" />
+            </>
+          )}
         </div>
       </section>
 
@@ -295,6 +318,15 @@ export function AdminPanel() {
                     <MetricBox icon={TrendingUp} label="Conversion" value={`${stats?.conversion_rate ?? 0}%`} tone="sky" />
                     <MetricBox icon={CalendarClock} label="Follow-ups today" value={stats?.follow_ups_due_today ?? 0} tone="amber" />
                     <MetricBox icon={ClipboardList} label="Overdue" value={stats?.overdue_follow_ups ?? 0} tone="rose" />
+                    {(stats?.money_metrics?.metrics || []).map((m) => (
+                      <MetricBox
+                        key={m.role}
+                        icon={IndianRupee}
+                        label={m.label}
+                        value={formatINR(m.total)}
+                        tone={m.role === "pending_amount" ? "amber" : m.role === "collection" ? "emerald" : "sky"}
+                      />
+                    ))}
                   </div>
                 )}
               </Panel>

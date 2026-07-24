@@ -28,6 +28,7 @@ from .permissions import (
     is_admin,
     leads_for_user,
     project_ids_for_user,
+    aggregate_money_metrics,
     projects_for_user,
     teams_for_user,
     user_can_access_project,
@@ -380,6 +381,11 @@ class DashboardView(APIView):
         data = self._stats(leads)
         data.update(self._workdesk(request))
         data.update(self._filter_meta(request, leads))
+        project_filter = request.query_params.get("project")
+        pids = [int(project_filter)] if project_filter else list(
+            leads.values_list("project_id", flat=True).distinct()
+        )
+        data["money_metrics"] = aggregate_money_metrics(leads, project_ids=pids)
         return Response(data)
 
     @staticmethod
@@ -722,6 +728,12 @@ class AdminDashboardView(APIView):
                 "to": request.query_params.get("to"),
             },
         }
+        payload["money_metrics"] = aggregate_money_metrics(
+            all_leads,
+            project_ids=[int(project_filter)] if project_filter else list(
+                all_leads.values_list("project_id", flat=True).distinct()
+            ),
+        )
         return Response(payload)
 
 

@@ -140,14 +140,29 @@ export function DynamicForm({
             />
           ) : f.type === "file" ? (
             <FileUploadField field={f} value={values[f.field_id]} readOnly={readOnly} leadId={leadId} onChange={(val) => set(f.field_id, val)} />
+          ) : f.type === "currency" ? (
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₹</span>
+              <Input
+                className={cn(formInputCls, "pl-7")}
+                disabled={readOnly}
+                placeholder={getFieldPlaceholder(f)}
+                type="number"
+                min={f.min !== undefined ? f.min : 0}
+                max={f.max !== undefined ? f.max : undefined}
+                step="0.01"
+                value={String(values[f.field_id] ?? "")}
+                onChange={(e) => set(f.field_id, e.target.value)}
+              />
+            </div>
           ) : (
             <Input
               className={formInputCls}
               disabled={readOnly}
               placeholder={getFieldPlaceholder(f)}
               type={getInputType(f)}
-              min={f.type === "number" && f.min !== undefined ? f.min : undefined}
-              max={f.type === "number" && f.max !== undefined ? f.max : undefined}
+              min={(f.type === "number" || f.type === "currency") && f.min !== undefined ? f.min : undefined}
+              max={(f.type === "number" || f.type === "currency") && f.max !== undefined ? f.max : undefined}
               value={String(values[f.field_id] || "")}
               onChange={(e) => set(f.field_id, e.target.value)}
             />

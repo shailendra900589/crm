@@ -583,6 +583,7 @@ export type FormFieldType =
   | "text"
   | "textarea"
   | "number"
+  | "currency"
   | "email"
   | "phone"
   | "url"
@@ -593,6 +594,9 @@ export type FormFieldType =
   | "radio"
   | "multiselect"
   | "file";
+
+/** Tags currency/number fields so dashboards can roll up Collection / Pending / Deal value */
+export type FormMetricRole = "collection" | "pending_amount" | "deal_value";
 
 export type FormField = {
   field_id: string;
@@ -606,6 +610,25 @@ export type FormField = {
   max?: number;
   file_accept?: string;
   max_file_mb?: number;
+  /** INR by default — used by currency fields */
+  currency?: string;
+  /** When set, field values feed dashboard money KPIs */
+  metric_role?: FormMetricRole | string;
+};
+
+export type MoneyMetric = {
+  role: string;
+  label: string;
+  total: number;
+  currency: string;
+};
+
+export type MoneyMetrics = {
+  has_money: boolean;
+  metrics: MoneyMetric[];
+  total_collection: number;
+  total_pending: number;
+  total_deal_value: number;
 };
 export type CustomForm = { id: number; project: number; project_name: string; title: string; schema: FormField[]; is_active: boolean };
 export type TeamMember = { id: number; name: string; role: string; username: string };
@@ -733,6 +756,7 @@ export type DashboardStats = {
   company_stats?: KpiRow[];
   product_stats?: KpiRow[];
   filter_summary?: FilterSummary;
+  money_metrics?: MoneyMetrics;
   project_form: CustomForm | null;
   forms_filled_today: number;
   next_visit: LeadVisit | null;
@@ -752,6 +776,7 @@ export type AdminDashboardStats = {
   product_stats: KpiRow[];
   team_stats: { id: number; name: string; role: string; lead_count: number; confirmed: number }[];
   filter_summary?: FilterSummary;
+  money_metrics?: MoneyMetrics;
   forms_filled_today: number;
   visits_scheduled_today: number;
   upcoming_team_visits: LeadVisit[];

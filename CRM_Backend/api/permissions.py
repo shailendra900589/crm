@@ -271,7 +271,7 @@ def validate_form_answers(schema, answers):
             if not re.match(r"^https?://", val.strip(), re.I):
                 errors.append(f"{label} must be a valid URL (starting with http:// or https://)")
 
-        if ftype == "number":
+        if ftype in ("number", "currency"):
             try:
                 num = float(val)
                 if field.get("min") is not None and num < float(field["min"]):
@@ -292,3 +292,89 @@ def validate_form_answers(schema, answers):
                     errors.append(f"{label}: invalid file type for this field")
 
     return errors
+
+
+ROLE_LABELS = {
+    "collection": "Amount Collected",
+    "pending_amount": "Collection Pending",
+    "deal_value": "Deal Value",
+}
+
+
+def discover_money_fields(project_ids=None):
+    """Map field_id -> {role, label, currency} from project form schemas."""
+    from .models import CustomForm
+
+    qs = CustomForm.objects.all()
+    if project_ids is not None:
+        qs = qs.filter(project_id__in=list(project_ids) or [-1])
+
+    mapping = {}
+    for form in qs.only("schema"):
+        for field in form.schema or []:
+            fid = field.get("field_id")
+            role = field.get("metric_role")
+            ftype = field.get("type", "text")
+            if not fid or not role or ftype not in ("currency", "number"):
+                continue
+            mapping[fid] = {
+                "role": role,
+                "label": field.get("label") or ROLE_LABELS.get(role, role),
+                "currency": field.get("currency") or "INR",
+            }
+    return mapping
+
+
+def aggregate_money_metrics(leads_qs, project_ids=None):
+    """Sum tagged amount fields from lead.custom_data for dashboard KPIs."""
+    mapping = discover_money_fields(project_ids)
+    empty = {
+        "has_money": False,
+        "metrics": [],
+        "total_collection": 0,
+        "total_pending": 0,
+        "total_deal_value": 0,
+    }
+    if not mapping:
+        return empty
+
+    totals = {}
+    labels = {}
+    currencies = {}
+    for meta in mapping.values():
+        role = meta["role"]
+        totals.setdefault(role, 0.0)
+        labels.setdefault(role, meta["label"])
+        currencies.setdefault(role, meta["currency"])
+
+    for lead in leads_qs.only("custom_data").iterator(chunk_size=500):
+        data = lead.custom_data or {}
+        if not isinstance(data, dict):
+            continue
+        for fid, meta in mapping.items():
+            raw = data.get(fid)
+            if raw is None or raw == "":
+                continue
+            try:
+                totals[meta["role"]] += float(raw)
+            except (TypeError, ValueError):
+                continue
+
+    metrics = [
+        {
+            "role": role,
+            "label": labels.get(role, ROLE_LABELS.get(role, role)),
+            "total": round(total, 2),
+            "currency": currencies.get(role, "INR"),
+        }
+        for role, total in totals.items()
+    ]
+    metrics.sort(key=lambda m: {"pending_amount": 0, "collection": 1, "deal_value": 2}.get(m["role"], 9))
+
+    return {
+        "has_money": True,
+        "metrics": metrics,
+        "total_collection": round(totals.get("collection", 0), 2),
+        "total_pending": round(totals.get("pending_amount", 0), 2),
+        "total_deal_value": round(totals.get("deal_value", 0), 2),
+    }

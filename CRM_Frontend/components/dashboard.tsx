@@ -16,6 +16,7 @@ import {
   Factory,
   FileText,
   History,
+  IndianRupee,
   MapPin,
   Phone,
   Send,
@@ -30,6 +31,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { formatINR } from "@/lib/form-fields";
 
 const COLORS = ["#7c3aed", "#2563eb", "#10b981", "#f59e0b", "#f43f5e"];
 const STATUS_LABELS: Record<string, string> = {
@@ -255,6 +257,9 @@ export function DashboardView() {
             <QuickStatPill label="Confirmed" value={data.orders_confirmed} />
             <QuickStatPill label="Overdue" value={data.overdue_follow_ups} warn />
             <QuickStatPill label={isBdm ? "Forms today" : "Team forms"} value={data.forms_filled_today} />
+            {data.money_metrics?.has_money && data.money_metrics.total_pending > 0 && (
+              <QuickStatPill label="Pending ₹" value={formatINR(data.money_metrics.total_pending)} warn />
+            )}
           </div>
         </div>
       </section>
@@ -298,9 +303,25 @@ export function DashboardView() {
           <MetricCard label="Forms Today" value={data.forms_filled_today} icon={FileText} variant="violet" accent="text-violet-700" pulse={pulse} />
           <MetricCard label="Conversion" value={`${data.conversion_rate}%`} icon={TrendingUp} variant="emerald" accent="text-emerald-700" pulse={pulse} />
         </div>
+        {data.money_metrics?.has_money && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {data.money_metrics.metrics.map((m) => (
+              <MetricCard
+                key={m.role}
+                label={m.label}
+                value={formatINR(m.total)}
+                icon={IndianRupee}
+                variant={m.role === "pending_amount" ? "amber" : m.role === "collection" ? "emerald" : "blue"}
+                accent={m.role === "pending_amount" ? "text-amber-700" : m.role === "collection" ? "text-emerald-700" : "text-blue-700"}
+                pulse={pulse}
+                hint="From tagged form amount fields"
+              />
+            ))}
+          </div>
+        )}
       </section>
 
-      {(data.company_stats?.length || data.product_stats?.length) ? (
+      {(isManager || isTL) && (data.company_stats?.length || data.product_stats?.length) ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {!!data.company_stats?.length && (
             <KpiTable title="Companies" rows={data.company_stats} columns={["name", "city", "lead_count", "confirmed_count", "conversion"]} />
@@ -730,7 +751,7 @@ function SectionDivider({ label }: { label: string }) {
   );
 }
 
-function QuickStatPill({ label, value, warn }: { label: string; value?: number; warn?: boolean }) {
+function QuickStatPill({ label, value, warn }: { label: string; value?: number | string; warn?: boolean }) {
   return (
     <div className={cn(
       "rounded-2xl px-4 py-3 backdrop-blur",
