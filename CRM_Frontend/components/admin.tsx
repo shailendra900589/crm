@@ -102,22 +102,35 @@ export function AdminPanel() {
 
   return (
     <div className="space-y-8">
-      {/* Admin hero */}
-      <section className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl sm:p-8">
-        <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-indigo-500/20 blur-3xl" />
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      {/* Admin console hero — distinct from field workdesk */}
+      <section className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-950 p-5 text-white sm:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold backdrop-blur">
-              <Shield className="h-3.5 w-3.5 text-indigo-300" />
-              Admin Control Center
+            <div className="mb-2 inline-flex items-center gap-2 rounded-md bg-white/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-slate-200">
+              <Shield className="h-3.5 w-3.5" />
+              Admin only
             </div>
-            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Organization Overview</h2>
-            <p className="mt-2 max-w-xl text-sm text-slate-300">
-              Monitor all projects, managers, field teams, visits and conversions across the CRM.
+            <h2 className="text-2xl font-bold tracking-tight">Organization Control Center</h2>
+            <p className="mt-1.5 max-w-xl text-sm text-slate-400">
+              Projects, users, forms and org-wide performance — not the field workdesk.
             </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link href="/admin/projects" className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+                Manage projects
+              </Link>
+              <Link href="/admin/users" className="rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10">
+                Manage users
+              </Link>
+              <Link href="/admin/forms" className="rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10">
+                Form builder
+              </Link>
+              <Link href="/admin/audit" className="rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10">
+                Audit log
+              </Link>
+            </div>
           </div>
           {stats && (
-            <div className="grid grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <AdminHeroStat label="Projects" value={stats.active_projects} />
               <AdminHeroStat label="Companies" value={stats.total_companies ?? 0} />
               <AdminHeroStat label="Conversion" value={`${stats.conversion_rate}%`} />

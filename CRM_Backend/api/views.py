@@ -555,7 +555,7 @@ class AdminDashboardView(APIView):
 
     def get(self, request):
         if not is_admin(request.user):
-            raise PermissionDenied("Only Manager can access admin dashboard.")
+            raise PermissionDenied("Only Admin can access the organization dashboard.")
 
         all_leads = admin_filter_leads(request, Lead.objects.select_related("project", "bdm", "merchant", "product"))
         total_leads = all_leads.count()
@@ -1838,7 +1838,7 @@ class AdminManagersView(APIView):
 
     def get(self, request):
         if not is_admin(request.user):
-            raise PermissionDenied("Manager access only.")
+            raise PermissionDenied("Only Admin can list managers.")
         managers = User.objects.filter(role=User.Role.MANAGER).annotate(
             lead_count=Count("leads"),
             confirmed=Count("leads", filter=Q(leads__status=Lead.Status.ORDER_CONFIRMED)),

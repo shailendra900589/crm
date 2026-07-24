@@ -79,7 +79,10 @@ export function DashboardView() {
     enabled: !!activeVisit,
   });
 
-  const isSupervisor = me && ["Admin", "Manager", "TL"].includes(me.role);
+  const isSupervisor = me && ["Manager", "TL"].includes(me.role);
+  const isManager = me?.role === "Manager";
+  const isTL = me?.role === "TL";
+  const isBdm = !me || me.role === "BDM";
   const leads = useMemo(() => myLeads?.results || [], [myLeads?.results]);
   const [activeProjectId, setActiveProjectId] = useState(() => getProjectId() || "");
   const currentProject = useMemo(
@@ -206,14 +209,24 @@ export function DashboardView() {
 
   return (
     <div className="space-y-6">
-      {/* Hero welcome strip */}
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-5 text-white dark:border-slate-700 sm:p-6">
+      {/* Role-specific hero */}
+      <section
+        className={cn(
+          "relative overflow-hidden rounded-2xl border p-5 text-white sm:p-6",
+          isManager && "border-emerald-800/50 bg-gradient-to-br from-emerald-900 via-teal-950 to-slate-950",
+          isTL && "border-amber-800/40 bg-gradient-to-br from-amber-800 via-orange-950 to-slate-950",
+          isBdm && "border-slate-700 bg-gradient-to-br from-blue-900 via-slate-900 to-slate-950",
+        )}
+      >
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200">
-                <Sparkles className="h-3 w-3 text-blue-300" />
-                Workdesk
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white/90">
+                <Sparkles className="h-3 w-3" />
+                {isManager ? "Manager hub" : isTL ? "TL desk" : "Field workdesk"}
+              </span>
+              <span className="rounded-full bg-black/20 px-2.5 py-1 text-[11px] font-medium text-white/80">
+                {currentProject?.name || "Project"}
               </span>
               {pulse && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-1 text-[11px] font-medium text-emerald-200">
@@ -223,16 +236,25 @@ export function DashboardView() {
               )}
             </div>
             <h2 className="text-xl font-bold tracking-tight sm:text-2xl">
-              Welcome back, {me?.first_name || me?.username || "there"}
+              {isManager
+                ? `Team overview, ${me?.first_name || me?.username || "Manager"}`
+                : isTL
+                  ? `Squad desk, ${me?.first_name || me?.username || "TL"}`
+                  : `Welcome back, ${me?.first_name || me?.username || "there"}`}
             </h2>
-            <p className="mt-1 text-sm text-slate-400">
-              {todayLabel} · {currentProject?.name || "Project"}
+            <p className="mt-1 text-sm text-white/70">
+              {todayLabel}
+              {isManager
+                ? " · Monitor BDMs, follow-ups and conversion"
+                : isTL
+                  ? " · Coach the squad and close visits"
+                  : " · Fill forms and complete visits"}
             </p>
           </div>
           <div className="flex flex-wrap gap-2.5">
             <QuickStatPill label="Confirmed" value={data.orders_confirmed} />
             <QuickStatPill label="Overdue" value={data.overdue_follow_ups} warn />
-            <QuickStatPill label="Forms today" value={data.forms_filled_today} />
+            <QuickStatPill label={isBdm ? "Forms today" : "Team forms"} value={data.forms_filled_today} />
           </div>
         </div>
       </section>
@@ -252,8 +274,22 @@ export function DashboardView() {
       {/* KPI row */}
       <section>
         <SectionHeading
-          title={data?.filter_summary?.project_name ? `${data.filter_summary.project_name} Performance` : "Performance Snapshot"}
-          subtitle="Real-time metrics filtered by project, company & product"
+          title={
+            isManager
+              ? "Team performance"
+              : isTL
+                ? "Squad snapshot"
+                : data?.filter_summary?.project_name
+                  ? `${data.filter_summary.project_name} Performance`
+                  : "My performance"
+          }
+          subtitle={
+            isManager
+              ? "Leads and conversion across your reporting hierarchy"
+              : isTL
+                ? "Your squad scope for this project"
+                : "Your assigned project metrics"
+          }
         />
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Total Leads" value={data.total_leads} icon={Target} variant="slate" pulse={pulse} hint="In your scope" />
@@ -275,10 +311,57 @@ export function DashboardView() {
         </div>
       ) : null}
 
+      {/* Manager/TL: analytics before form; BDM: form first */}
+      {(isManager || isTL) && (
+        <section>
+          <SectionHeading title="Analytics" subtitle="Disposition and BDM leaderboard in your hierarchy" />
+          <div className="mt-3 grid gap-4 lg:grid-cols-2">
+            <ChartCard title="Lead Disposition" subtitle="Status distribution across pipeline">
+              {disposition.length ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie data={disposition} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}>
+                      {disposition.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0" }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="py-12 text-center text-sm text-slate-400">No disposition data yet</p>
+              )}
+            </ChartCard>
+            <ChartCard title="BDM Leaderboard" subtitle="Orders confirmed by team member">
+              {leaderboard.length ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={leaderboard} barSize={28}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0" }} />
+                    <Bar dataKey="confirmed" fill={isManager ? "#059669" : "#d97706"} radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="py-12 text-center text-sm text-slate-400">No leaderboard data yet</p>
+              )}
+            </ChartCard>
+          </div>
+        </section>
+      )}
+
       <div className="grid items-start gap-5 xl:grid-cols-3">
         {/* Main workdesk */}
         <div className="space-y-5 xl:col-span-2">
-          <SectionHeading title="Onboarding Form" subtitle="Fill merchant details and complete the visit" />
+          <SectionHeading
+            title={isManager ? "Optional visit form" : isTL ? "Visit / onboarding form" : "Onboarding Form"}
+            subtitle={
+              isManager
+                ? "Managers usually coach the team — fill a form only when needed"
+                : isTL
+                  ? "Complete forms for your squad visits"
+                  : "Fill merchant details and complete the visit"
+            }
+          />
 
           {data.project_form ? (
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
@@ -413,40 +496,42 @@ export function DashboardView() {
             </Panel>
           )}
 
-          <section>
-            <SectionHeading title="Analytics" subtitle="Disposition breakdown and team performance" />
-            <div className="mt-3 grid gap-4 lg:grid-cols-2">
-              <ChartCard title="Lead Disposition" subtitle="Status distribution across pipeline">
-                {disposition.length ? (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <PieChart>
-                      <Pie data={disposition} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}>
-                        {disposition.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0" }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="py-12 text-center text-sm text-slate-400">No disposition data yet</p>
-                )}
-              </ChartCard>
-              <ChartCard title="BDM Leaderboard" subtitle="Orders confirmed by team member">
-                {leaderboard.length ? (
-                  <ResponsiveContainer width="100%" height={220}>
-                    <BarChart data={leaderboard} barSize={28}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0" }} />
-                      <Bar dataKey="confirmed" fill="#2563eb" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="py-12 text-center text-sm text-slate-400">No leaderboard data yet</p>
-                )}
-              </ChartCard>
-            </div>
-          </section>
+          {isBdm && (
+            <section>
+              <SectionHeading title="Analytics" subtitle="Your disposition and confirmation trend" />
+              <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                <ChartCard title="Lead Disposition" subtitle="Status distribution across pipeline">
+                  {disposition.length ? (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie data={disposition} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3}>
+                          {disposition.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0" }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="py-12 text-center text-sm text-slate-400">No disposition data yet</p>
+                  )}
+                </ChartCard>
+                <ChartCard title="My confirmations" subtitle="Orders confirmed in your scope">
+                  {leaderboard.length ? (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <BarChart data={leaderboard} barSize={28}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0" }} />
+                        <Bar dataKey="confirmed" fill="#2563eb" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="py-12 text-center text-sm text-slate-400">No leaderboard data yet</p>
+                  )}
+                </ChartCard>
+              </div>
+            </section>
+          )}
         </div>
 
         {/* Right sidebar */}

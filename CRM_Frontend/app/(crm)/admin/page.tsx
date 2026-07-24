@@ -1,5 +1,12 @@
+"use client";
+
 import { AdminPanel } from "@/components/admin";
+import { RequireRole } from "@/components/role-gate";
 
 export default function AdminPage() {
-  return <AdminPanel />;
+  return (
+    <RequireRole roles={["Admin"]}>
+      <AdminPanel />
+    </RequireRole>
+  );
 }
