@@ -243,3 +243,20 @@ class SalesTarget(models.Model):
 
     def __str__(self):
         return f"{self.user} {self.year}-{self.month:02d}"
+
+
+class RolePagePermission(models.Model):
+    """Admin-controlled page access for Manager / TL / BDM."""
+
+    role = models.CharField(max_length=20, choices=User.Role.choices, db_index=True)
+    page_key = models.CharField(max_length=64, db_index=True)
+    enabled = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["role", "page_key"]
+        unique_together = [("role", "page_key")]
+
+    def __str__(self):
+        state = "on" if self.enabled else "off"
+        return f"{self.role} · {self.page_key} · {state}"

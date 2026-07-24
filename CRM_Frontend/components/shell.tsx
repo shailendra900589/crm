@@ -5,92 +5,30 @@ import { LiveSyncProvider, liveScopeForRole } from "@/components/live-sync";
 import { NotificationsBell } from "@/components/notifications-bell";
 import { useTheme } from "@/app/providers";
 import { api, clearTokens, getProjectId, onProjectChange, setProjectId, type User } from "@/lib/api";
+import {
+  ADMIN_NAV,
+  canAccessPage,
+  FIELD_NAV,
+  homeHrefForUser,
+  hrefToPageKey,
+  navLabel,
+  type AppRole,
+} from "@/lib/nav-catalog";
 import { cn } from "@/lib/utils";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  BarChart3,
-  BellRing,
-  CalendarClock,
-  CalendarDays,
-  ClipboardList,
-  Columns3,
-  Copy,
-  Crosshair,
-  FileText,
   FolderKanban,
-  LayoutDashboard,
   LogOut,
   Menu,
   Moon,
-  Shield,
   Sun,
-  Target,
-  UserCog,
-  UserRound,
-  Users,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-type Role = "Admin" | "Manager" | "TL" | "BDM";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  roles: Role[];
-};
-
-/** Strict role menus — Admin console ≠ field workdesk */
-const NAV: NavItem[] = [
-  // Admin console
-  { href: "/admin", label: "Org Dashboard", icon: Shield, roles: ["Admin"] },
-  { href: "/admin/projects", label: "Projects", icon: FolderKanban, roles: ["Admin"] },
-  { href: "/admin/users", label: "Users", icon: UserCog, roles: ["Admin"] },
-  { href: "/admin/forms", label: "Form Builder", icon: FileText, roles: ["Admin"] },
-  { href: "/admin/audit", label: "Audit Log", icon: ClipboardList, roles: ["Admin"] },
-  { href: "/team", label: "Teams", icon: Users, roles: ["Admin"] },
-  { href: "/reports", label: "Org Reports", icon: BarChart3, roles: ["Admin"] },
-
-  // Manager hub
-  { href: "/dashboard", label: "Team Hub", icon: LayoutDashboard, roles: ["Manager"] },
-  { href: "/leads", label: "Team Leads", icon: Target, roles: ["Manager"] },
-  { href: "/pipeline", label: "Pipeline", icon: Columns3, roles: ["Manager"] },
-  { href: "/duplicates", label: "Duplicates", icon: Copy, roles: ["Manager"] },
-  { href: "/follow-ups", label: "Follow-ups", icon: CalendarClock, roles: ["Manager"] },
-  { href: "/alerts", label: "Alerts", icon: BellRing, roles: ["Manager"] },
-  { href: "/reports", label: "Reports", icon: BarChart3, roles: ["Manager"] },
-  { href: "/targets", label: "Targets", icon: Crosshair, roles: ["Manager"] },
-  { href: "/visits", label: "Visits", icon: CalendarDays, roles: ["Manager"] },
-  { href: "/team", label: "My Teams", icon: Users, roles: ["Manager"] },
-
-  // TL desk
-  { href: "/dashboard", label: "TL Desk", icon: LayoutDashboard, roles: ["TL"] },
-  { href: "/leads", label: "Leads", icon: Target, roles: ["TL"] },
-  { href: "/pipeline", label: "Pipeline", icon: Columns3, roles: ["TL"] },
-  { href: "/duplicates", label: "Duplicates", icon: Copy, roles: ["TL"] },
-  { href: "/follow-ups", label: "Follow-ups", icon: CalendarClock, roles: ["TL"] },
-  { href: "/alerts", label: "Alerts", icon: BellRing, roles: ["TL"] },
-  { href: "/reports", label: "Reports", icon: BarChart3, roles: ["TL"] },
-  { href: "/targets", label: "Targets", icon: Crosshair, roles: ["TL"] },
-  { href: "/visits", label: "Visits", icon: CalendarDays, roles: ["TL"] },
-  { href: "/team", label: "Squad", icon: Users, roles: ["TL"] },
-
-  // BDM field workdesk
-  { href: "/dashboard", label: "My Workdesk", icon: LayoutDashboard, roles: ["BDM"] },
-  { href: "/leads", label: "My Leads", icon: Target, roles: ["BDM"] },
-  { href: "/pipeline", label: "Pipeline", icon: Columns3, roles: ["BDM"] },
-  { href: "/follow-ups", label: "Follow-ups", icon: CalendarClock, roles: ["BDM"] },
-  { href: "/alerts", label: "Alerts", icon: BellRing, roles: ["BDM"] },
-  { href: "/visits", label: "My Visits", icon: CalendarDays, roles: ["BDM"] },
-  { href: "/reports", label: "My Reports", icon: BarChart3, roles: ["BDM"] },
-  { href: "/targets", label: "My Targets", icon: Crosshair, roles: ["BDM"] },
-
-  { href: "/profile", label: "Profile", icon: UserRound, roles: ["Admin", "Manager", "TL", "BDM"] },
-];
-
+type Role = AppRole;
 const ROLE_THEME: Record<
   Role,
   {
@@ -191,10 +129,29 @@ export function Shell({ children }: { children: React.ReactNode }) {
   };
 
   const current = projects?.find((p) => String(p.id) === activeProject);
-  const navItems = useMemo(
-    () => NAV.filter((n) => user && n.roles.includes(user.role as Role)),
-    [user],
-  );
+  const navItems = useMemo(() => {
+    if (!user) return [];
+    const role = user.role as Role;
+    const source = role === "Admin" ? ADMIN_NAV : FIELD_NAV;
+    return source
+      .filter((n) => canAccessPage(role, n.pageKey, user.allowed_pages))
+      .map((n) => ({
+        href: n.href,
+        label: navLabel(n, role),
+        icon: n.icon,
+        pageKey: n.pageKey,
+      }));
+  }, [user]);
+
+  // Soft-block deep links to pages Admin turned off
+  useEffect(() => {
+    if (!user) return;
+    const pageKey = hrefToPageKey(pathname);
+    if (!pageKey) return;
+    if (!canAccessPage(user.role as Role, pageKey, user.allowed_pages)) {
+      router.replace(homeHrefForUser(user.role as Role, user.allowed_pages));
+    }
+  }, [user, pathname, router]);
 
   const logout = () => {
     clearTokens();
@@ -217,6 +174,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     team: role === "TL" ? "Squad" : "Teams",
     admin: "Org Dashboard",
     forms: "Form Builder",
+    permissions: "Permissions",
     projects: isProjectDetail ? "Project Details" : "Projects",
     users: "Users",
     audit: "Audit Log",
@@ -279,7 +237,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   : pathname.startsWith(item.href);
               return (
                 <Link
-                  key={`${item.href}-${item.label}`}
+                  key={`${item.pageKey}-${item.href}`}
                   href={item.href}
                   onClick={() => setMobileOpen(false)}
                   className={cn(

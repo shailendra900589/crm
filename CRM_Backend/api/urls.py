@@ -6,6 +6,7 @@ from .views import (
     AdminDigestView,
     AdminExportView,
     AdminManagersView,
+    AdminPagePermissionsView,
     AuditLogListView,
     BulkJobView,
     ChangePasswordView,
@@ -56,6 +57,7 @@ urlpatterns = [
     path("admin/audit-logs/", AuditLogListView.as_view()),
     path("admin/managers/", AdminManagersView.as_view()),
     path("admin/managers/<int:manager_id>/dashboard/", ManagerDrilldownView.as_view()),
+    path("admin/page-permissions/", AdminPagePermissionsView.as_view()),
     path("bulk-jobs/<int:job_id>/", BulkJobView.as_view()),
     path("", include(router.urls)),
 ]

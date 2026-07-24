@@ -1,5 +1,10 @@
 import { AlertsPage } from "@/components/alerts";
+import { RequirePage } from "@/components/role-gate";
 
 export default function Page() {
-  return <AlertsPage />;
+  return (
+    <RequirePage pageKey="alerts">
+      <AlertsPage />
+    </RequirePage>
+  );
 }

@@ -229,6 +229,12 @@ export const api = {
     request<AdminDashboardStats>(`/api/admin/dashboard/${buildAdminQuery(filters)}`),
   adminManagers: () => request<ManagerSummary[]>("/api/admin/managers/"),
   managerDashboard: (id: number) => request<{ manager: User; stats: DashboardStats }>(`/api/admin/managers/${id}/dashboard/`),
+  pagePermissions: () => request<PagePermissionMatrix>("/api/admin/page-permissions/"),
+  updatePagePermissions: (permissions: { page_key: string; role: string; enabled: boolean }[]) =>
+    request<PagePermissionMatrix>("/api/admin/page-permissions/", {
+      method: "PUT",
+      body: JSON.stringify({ permissions }),
+    }),
 
   teams: () => requestList<Team>(`/api/teams/${buildQuery()}`),
   createTeam: (data: Partial<Team> & { members?: number[] }) =>
@@ -643,7 +649,17 @@ export type CrmUser = User & {
   assigned_project_ids?: number[];
   email?: string;
   is_active_user?: boolean;
+  allowed_pages?: string[];
 };
+export type PagePermissionRow = {
+  page_key: string;
+  label: string;
+  href: string;
+  description?: string;
+  locked?: boolean;
+  roles: { Manager: boolean; TL: boolean; BDM: boolean };
+};
+export type PagePermissionMatrix = { pages: PagePermissionRow[] };
 export type CreateUserData = {
   username: string;
   password: string;

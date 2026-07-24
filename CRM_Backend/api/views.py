@@ -134,17 +134,74 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        from .page_access import allowed_pages_for_user
+
+        data = UserSerializer(request.user).data
+        data["allowed_pages"] = allowed_pages_for_user(request.user)
+        return Response(data)
 
     def patch(self, request):
         """Update own profile (name, email, mobile). Role/projects are admin-only."""
+        from .page_access import allowed_pages_for_user
+
         allowed = {"first_name", "last_name", "email", "mobile_number"}
         data = {k: v for k, v in request.data.items() if k in allowed}
         for key, value in data.items():
             setattr(request.user, key, value if value is not None else "")
         if data:
             request.user.save(update_fields=list(data.keys()))
-        return Response(UserSerializer(request.user).data)
+        payload = UserSerializer(request.user).data
+        payload["allowed_pages"] = allowed_pages_for_user(request.user)
+        return Response(payload)
+
+
+class AdminPagePermissionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not is_admin(request.user):
+            raise PermissionDenied("Only Admin can view page permissions.")
+        from .page_access import page_permissions_matrix
+
+        return Response(page_permissions_matrix())
+
+    def put(self, request):
+        if not is_admin(request.user):
+            raise PermissionDenied("Only Admin can update page permissions.")
+        from .models import RolePagePermission
+        from .page_access import FIELD_PAGE_KEYS, LOCKED_PAGE_KEYS, page_permissions_matrix
+        from .audit import log_audit
+
+        items = request.data.get("permissions") or []
+        if not isinstance(items, list):
+            return Response({"detail": "permissions must be a list."}, status=status.HTTP_400_BAD_REQUEST)
+
+        valid_roles = {User.Role.MANAGER, User.Role.TL, User.Role.BDM}
+        updated = 0
+        for item in items:
+            page_key = (item.get("page_key") or "").strip()
+            role = item.get("role")
+            enabled = bool(item.get("enabled"))
+            if page_key not in FIELD_PAGE_KEYS or role not in valid_roles:
+                continue
+            if page_key in LOCKED_PAGE_KEYS:
+                enabled = True
+            RolePagePermission.objects.update_or_create(
+                role=role,
+                page_key=page_key,
+                defaults={"enabled": enabled},
+            )
+            updated += 1
+
+        log_audit(
+            request.user,
+            action="permissions.pages_updated",
+            entity_type="RolePagePermission",
+            entity_id=None,
+            message=f"Updated {updated} page permission rows",
+            meta={"count": updated},
+        )
+        return Response(page_permissions_matrix())
 
 
 class ChangePasswordView(APIView):

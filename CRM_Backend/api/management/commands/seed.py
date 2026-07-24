@@ -186,3 +186,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             "Seeded: admin/manager/tl/bdm + 3 projects + teams + custom forms + 5 leads per project"
         ))
+
+        from api.page_access import ensure_default_page_permissions
+        n = ensure_default_page_permissions()
+        self.stdout.write(self.style.SUCCESS(f"Page permissions ready ({n} new rows)"))

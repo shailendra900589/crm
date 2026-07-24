@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardView } from "@/components/dashboard";
+import { RequirePage } from "@/components/role-gate";
 import { api } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -18,5 +19,9 @@ export default function DashboardPage() {
     return <div className="h-64 animate-pulse rounded-2xl bg-slate-100" />;
   }
 
-  return <DashboardView />;
+  return (
+    <RequirePage pageKey="dashboard">
+      <DashboardView />
+    </RequirePage>
+  );
 }

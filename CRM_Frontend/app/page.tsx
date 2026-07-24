@@ -2,6 +2,7 @@
 
 import { useTheme } from "@/app/providers";
 import { api, isLoggedIn, saveTokens } from "@/lib/api";
+import { homeHrefForUser } from "@/lib/nav-catalog";
 import { Button, Card, Input } from "@/components/ui";
 import { Eye, EyeOff, Moon, Sun } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -19,7 +20,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (!isLoggedIn()) return;
     api.me()
-      .then((user) => router.replace(user.role === "Admin" ? "/admin" : "/dashboard"))
+      .then((user) => router.replace(homeHrefForUser(user.role, user.allowed_pages)))
       .catch(() => {});
   }, [router]);
 
@@ -38,7 +39,7 @@ export default function LoginPage() {
       const tokens = await api.login(user, pass);
       saveTokens(tokens);
       const me = await api.me();
-      router.push(me.role === "Admin" ? "/admin" : "/dashboard");
+      router.push(homeHrefForUser(me.role, me.allowed_pages));
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       if (/no active account|credentials|unauthorized|401/i.test(msg)) {

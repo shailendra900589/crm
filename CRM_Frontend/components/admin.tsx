@@ -122,6 +122,7 @@ export function AdminPanel() {
           <div className="flex flex-wrap gap-2">
             <QuickLink href="/admin/projects" icon={FolderKanban} label="Projects" primary />
             <QuickLink href="/admin/users" icon={UserCog} label="Users" />
+            <QuickLink href="/admin/permissions" icon={Shield} label="Permissions" />
             <QuickLink href="/admin/forms" icon={FileText} label="Forms" />
             <QuickLink href="/admin/audit" icon={ClipboardList} label="Audit" />
             <QuickLink href="/team" icon={Users} label="Teams" />
