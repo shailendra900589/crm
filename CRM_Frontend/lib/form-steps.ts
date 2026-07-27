@@ -3,7 +3,6 @@ import type { FormField } from "@/lib/api";
 export type FormWizardStep = {
   id: string;
   title: string;
-  description?: string;
   fields: FormField[];
 };
 
@@ -23,21 +22,12 @@ export function countStepBreaks(schema: FormField[]): number {
   return schema.filter(isStepBreak).length;
 }
 
-export function defaultStepBreak(stepNumber: number): FormField {
-  const titles: Record<number, string> = {
-    2: "Business & GST details",
-    3: "Documents & uploads",
-  };
+/** Minimal page-break marker — no preset titles or descriptions. */
+export function defaultStepBreak(): FormField {
   return {
     field_id: `step_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     type: "step_break",
-    label: titles[stepNumber] || `Step ${stepNumber}`,
-    help_text:
-      stepNumber === 2
-        ? "GST number, requirements, and compliance fields"
-        : stepNumber === 3
-          ? "Upload images and supporting files"
-          : "Next group of questions",
+    label: "Split",
     required: false,
   };
 }
@@ -51,16 +41,13 @@ export function splitSchemaIntoSteps(schema: FormField[]): FormWizardStep[] {
 
   const steps: FormWizardStep[] = [];
   let bucket: FormField[] = [];
-  let nextTitle = "Contact & basic details";
-  let nextDescription: string | undefined = "Name, email, phone, and primary info";
 
   const flush = () => {
     const fields = bucket.filter(isInputField);
     if (!fields.length) return;
     steps.push({
       id: `step_${steps.length}`,
-      title: nextTitle,
-      description: nextDescription,
+      title: `Step ${steps.length + 1}`,
       fields,
     });
     bucket = [];
@@ -69,8 +56,6 @@ export function splitSchemaIntoSteps(schema: FormField[]): FormWizardStep[] {
   for (const field of input) {
     if (isStepBreak(field)) {
       flush();
-      nextTitle = field.label?.trim() || `Step ${steps.length + 1}`;
-      nextDescription = field.help_text?.trim() || undefined;
     } else {
       bucket.push(field);
     }

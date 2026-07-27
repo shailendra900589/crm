@@ -181,8 +181,6 @@ function WizardForm({
             <p className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300">
               Step {stepIdx + 1} of {steps.length}
             </p>
-            <h4 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-50">{step.title}</h4>
-            {step.description && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{step.description}</p>}
           </div>
         )}
 

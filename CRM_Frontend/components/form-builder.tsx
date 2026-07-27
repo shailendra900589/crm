@@ -144,17 +144,11 @@ function FileTypeSelector({ value, onChange }: { value?: string; onChange: (v: s
 
 function StepBreakCard({
   field,
-  index,
-  selected,
   onSelect,
-  onChange,
   onRemove,
 }: {
   field: FormField;
-  index: number;
-  selected: boolean;
   onSelect: () => void;
-  onChange: (f: FormField) => void;
   onRemove: () => void;
 }) {
   const controls = useDragControls();
@@ -165,65 +159,29 @@ function StepBreakCard({
       dragListener={false}
       dragControls={controls}
       onClick={onSelect}
-      className={cn(
-        "relative overflow-hidden rounded-2xl border-2 border-dashed transition-all",
-        selected
-          ? "border-violet-400/70 bg-violet-500/10"
-          : "border-violet-500/30 bg-violet-500/5 hover:border-violet-400/50",
-      )}
+      className="relative overflow-hidden rounded-xl border-2 border-dashed border-violet-500/35 bg-violet-500/[0.06] py-3 transition hover:border-violet-400/50"
     >
-      <div className="flex items-start gap-3 p-4 sm:p-5">
+      <div className="flex items-center gap-3 px-4" onClick={(e) => e.stopPropagation()}>
         <button
           type="button"
           onPointerDown={(e) => controls.start(e)}
-          className="mt-1 cursor-grab rounded-lg p-1.5 text-violet-400/70 hover:bg-violet-500/10 active:cursor-grabbing"
-          aria-label="Drag step panel"
+          className="cursor-grab rounded-md p-1 text-violet-400/80 hover:bg-violet-500/10 active:cursor-grabbing"
+          aria-label="Drag split"
         >
           <GripVertical className="h-4 w-4" />
         </button>
-        <div className="min-w-0 flex-1">
-          <div className="mb-2 flex items-center gap-2">
-            <Layers className="h-4 w-4 text-violet-300" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-violet-300">Step panel split</span>
-          </div>
-          {selected ? (
-            <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
-              <input
-                className="w-full border-0 border-b border-violet-500/30 bg-transparent text-lg font-bold text-violet-100 outline-none placeholder:text-violet-300/50 focus:border-violet-400"
-                value={field.label}
-                placeholder="Next panel title (e.g. GST & requirements)"
-                onChange={(e) => onChange({ ...field, label: e.target.value })}
-              />
-              <input
-                className="w-full rounded-xl border border-violet-500/30 bg-slate-950/60 px-3 py-2 text-sm text-violet-100 outline-none placeholder:text-violet-400/40 focus:border-violet-400/50"
-                value={field.help_text || ""}
-                placeholder="Short description for this step (optional)"
-                onChange={(e) => onChange({ ...field, help_text: e.target.value })}
-              />
-              <p className="text-xs text-violet-200/70">
-                Fields <strong>below</strong> this split open as the next screen when BDMs fill the form on mobile/web.
-              </p>
-              <button
-                type="button"
-                onClick={onRemove}
-                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/10"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Remove split
-              </button>
-            </div>
-          ) : (
-            <div>
-              <p className="font-semibold text-violet-100">{field.label || "Next step panel"}</p>
-              {field.help_text && <p className="mt-1 text-xs text-violet-200/70">{field.help_text}</p>}
-            </div>
-          )}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Layers className="h-4 w-4 shrink-0 text-violet-300" />
+          <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-violet-300">Step panel split</span>
         </div>
-        {!selected && (
-          <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-bold text-violet-200">
-            Panel {index + 1}
-          </span>
-        )}
+        <button
+          type="button"
+          onClick={onRemove}
+          className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/10"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Remove split
+        </button>
       </div>
     </Reorder.Item>
   );
@@ -613,10 +571,9 @@ export function FormBuilder() {
   };
 
   const addStepPanel = () => {
-    const stepNum = countStepBreaks(schema) + 2;
-    const next = [...schema, defaultStepBreak(stepNum)];
+    const next = [...schema, defaultStepBreak()];
     setSchema(next);
-    setSelectedIdx(next.length - 1);
+    setSelectedIdx(null);
   };
 
   const duplicateField = (index: number) => {
@@ -651,7 +608,7 @@ export function FormBuilder() {
           </div>
           <h2 className="mt-2 text-xl font-bold text-white sm:text-2xl">Build project forms</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Clean questions for BDMs — use <strong className="text-violet-300">Add step panel</strong> to split into 2–3 screens (contact → GST → uploads).
+            Add questions, then insert a <strong className="text-violet-300">step panel split</strong> where the next screen should begin.
           </p>
         </div>
 
@@ -745,14 +702,7 @@ export function FormBuilder() {
                       <StepBreakCard
                         key={f.field_id}
                         field={f}
-                        index={i}
-                        selected={selectedIdx === i}
-                        onSelect={() => setSelectedIdx(i)}
-                        onChange={(updated) => {
-                          const s = [...schema];
-                          s[i] = updated;
-                          setSchema(s);
-                        }}
+                        onSelect={() => setSelectedIdx(null)}
                         onRemove={() => {
                           setSchema(schema.filter((_, j) => j !== i));
                           setSelectedIdx(null);
