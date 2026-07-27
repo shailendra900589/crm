@@ -4,6 +4,7 @@ import { Badge, Button, Card, Input } from "@/components/ui";
 import { BulkUpload } from "@/components/bulk-upload";
 import { DocumentsPanel } from "@/components/documents-panel";
 import { DynamicForm } from "@/components/dynamic-form";
+import { hasWizardSteps } from "@/lib/form-steps";
 import { LeadActivityTimeline } from "@/components/lead-activity";
 import { api, getProjectId, onProjectChange, LEAD_STATUSES, type CallOutcome, type CreateLeadData, type Lead, type UpdateLeadData } from "@/lib/api";
 import { LogCallForm } from "@/components/log-call";
@@ -861,10 +862,20 @@ function LeadDetailModal({
 
           {tab === "form" && customForm && (
             <div>
-              <DynamicForm schema={customForm.schema} values={formData} onChange={setFormData} leadId={l.id} />
-              <Button className="mt-4" onClick={() => submitForm.mutate()} disabled={submitForm.isPending}>
-                {submitForm.isPending ? "Saving..." : "Save Form"}
-              </Button>
+              <DynamicForm
+                schema={customForm.schema}
+                values={formData}
+                onChange={setFormData}
+                leadId={l.id}
+                onSubmit={() => submitForm.mutate()}
+                submitLabel={submitForm.isPending ? "Saving..." : "Save Form"}
+                submitting={submitForm.isPending}
+              />
+              {!hasWizardSteps(customForm.schema) && (
+                <Button className="mt-4" onClick={() => submitForm.mutate()} disabled={submitForm.isPending}>
+                  {submitForm.isPending ? "Saving..." : "Save Form"}
+                </Button>
+              )}
             </div>
           )}
 

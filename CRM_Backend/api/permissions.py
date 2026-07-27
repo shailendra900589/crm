@@ -248,8 +248,10 @@ def validate_form_answers(schema, answers):
         fid = field.get("field_id")
         if not fid:
             continue
-        val = answers.get(fid)
         ftype = field.get("type", "text")
+        if ftype == "step_break":
+            continue
+        val = answers.get(fid)
         label = field.get("label", fid)
 
         if field.get("required"):

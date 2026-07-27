@@ -11,6 +11,7 @@ import {
   isOptionField,
   METRIC_ROLE_OPTIONS,
 } from "@/lib/form-fields";
+import { countStepBreaks, defaultStepBreak, hasWizardSteps } from "@/lib/form-steps";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, Reorder, useDragControls } from "framer-motion";
@@ -27,6 +28,7 @@ import {
   GripVertical,
   Hash,
   IndianRupee,
+  Layers,
   Link2,
   List,
   Mail,
@@ -137,6 +139,93 @@ function FileTypeSelector({ value, onChange }: { value?: string; onChange: (v: s
         ))}
       </div>
     </div>
+  );
+}
+
+function StepBreakCard({
+  field,
+  index,
+  selected,
+  onSelect,
+  onChange,
+  onRemove,
+}: {
+  field: FormField;
+  index: number;
+  selected: boolean;
+  onSelect: () => void;
+  onChange: (f: FormField) => void;
+  onRemove: () => void;
+}) {
+  const controls = useDragControls();
+
+  return (
+    <Reorder.Item
+      value={field}
+      dragListener={false}
+      dragControls={controls}
+      onClick={onSelect}
+      className={cn(
+        "relative overflow-hidden rounded-2xl border-2 border-dashed transition-all",
+        selected
+          ? "border-violet-400/70 bg-violet-500/10"
+          : "border-violet-500/30 bg-violet-500/5 hover:border-violet-400/50",
+      )}
+    >
+      <div className="flex items-start gap-3 p-4 sm:p-5">
+        <button
+          type="button"
+          onPointerDown={(e) => controls.start(e)}
+          className="mt-1 cursor-grab rounded-lg p-1.5 text-violet-400/70 hover:bg-violet-500/10 active:cursor-grabbing"
+          aria-label="Drag step panel"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex items-center gap-2">
+            <Layers className="h-4 w-4 text-violet-300" />
+            <span className="text-[11px] font-bold uppercase tracking-wider text-violet-300">Step panel split</span>
+          </div>
+          {selected ? (
+            <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+              <input
+                className="w-full border-0 border-b border-violet-500/30 bg-transparent text-lg font-bold text-violet-100 outline-none placeholder:text-violet-300/50 focus:border-violet-400"
+                value={field.label}
+                placeholder="Next panel title (e.g. GST & requirements)"
+                onChange={(e) => onChange({ ...field, label: e.target.value })}
+              />
+              <input
+                className="w-full rounded-xl border border-violet-500/30 bg-slate-950/60 px-3 py-2 text-sm text-violet-100 outline-none placeholder:text-violet-400/40 focus:border-violet-400/50"
+                value={field.help_text || ""}
+                placeholder="Short description for this step (optional)"
+                onChange={(e) => onChange({ ...field, help_text: e.target.value })}
+              />
+              <p className="text-xs text-violet-200/70">
+                Fields <strong>below</strong> this split open as the next screen when BDMs fill the form on mobile/web.
+              </p>
+              <button
+                type="button"
+                onClick={onRemove}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-rose-300 hover:bg-rose-500/10"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Remove split
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p className="font-semibold text-violet-100">{field.label || "Next step panel"}</p>
+              {field.help_text && <p className="mt-1 text-xs text-violet-200/70">{field.help_text}</p>}
+            </div>
+          )}
+        </div>
+        {!selected && (
+          <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-[10px] font-bold text-violet-200">
+            Panel {index + 1}
+          </span>
+        )}
+      </div>
+    </Reorder.Item>
   );
 }
 
@@ -364,7 +453,7 @@ function FieldCard({
   );
 }
 
-function AddQuestionMenu({ onAdd }: { onAdd: (type: string) => void }) {
+function AddQuestionMenu({ onAdd, onAddStep, stepCount }: { onAdd: (type: string) => void; onAddStep: () => void; stepCount: number }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -397,6 +486,18 @@ function AddQuestionMenu({ onAdd }: { onAdd: (type: string) => void }) {
         >
           <Plus className="h-4 w-4" />
           Add question
+        </button>
+        <button
+          type="button"
+          onClick={onAddStep}
+          className="inline-flex items-center gap-2 rounded-xl border border-violet-500/40 bg-violet-500/10 px-4 py-2.5 text-sm font-bold text-violet-200 transition hover:border-violet-400/60 hover:bg-violet-500/15"
+          title="Split form into multiple steps — next panel opens after Next"
+        >
+          <Layers className="h-4 w-4" />
+          Add step panel
+          {stepCount > 0 && (
+            <span className="rounded-full bg-violet-500/30 px-1.5 py-0.5 text-[10px]">{stepCount + 1} steps</span>
+          )}
         </button>
         {QUICK_ADD.map((q) => (
           <button
@@ -511,6 +612,13 @@ export function FormBuilder() {
     setSelectedIdx(next.length - 1);
   };
 
+  const addStepPanel = () => {
+    const stepNum = countStepBreaks(schema) + 2;
+    const next = [...schema, defaultStepBreak(stepNum)];
+    setSchema(next);
+    setSelectedIdx(next.length - 1);
+  };
+
   const duplicateField = (index: number) => {
     const source = schema[index];
     const copy: FormField = {
@@ -543,7 +651,7 @@ export function FormBuilder() {
           </div>
           <h2 className="mt-2 text-xl font-bold text-white sm:text-2xl">Build project forms</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Clean questions for BDMs — tag amounts as Collection or Pending for live dashboard KPIs.
+            Clean questions for BDMs — use <strong className="text-violet-300">Add step panel</strong> to split into 2–3 screens (contact → GST → uploads).
           </p>
         </div>
 
@@ -617,35 +725,59 @@ export function FormBuilder() {
                     {moneyFields.length} money KPI{moneyFields.length === 1 ? "" : "s"} linked
                   </span>
                 )}
+                {hasWizardSteps(schema) && (
+                  <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-1 font-medium text-violet-200">
+                    {countStepBreaks(schema) + 1} step wizard
+                  </span>
+                )}
               </div>
             </div>
 
-            <AddQuestionMenu onAdd={addField} />
+            <AddQuestionMenu onAdd={addField} onAddStep={addStepPanel} stepCount={countStepBreaks(schema)} />
 
             {isLoading ? (
               <div className="h-40 animate-pulse rounded-2xl bg-slate-900" />
             ) : (
               <Reorder.Group axis="y" values={schema} onReorder={setSchema} className="space-y-3">
                 <AnimatePresence>
-                  {schema.map((f, i) => (
-                    <FieldCard
-                      key={f.field_id}
-                      field={f}
-                      index={i}
-                      selected={selectedIdx === i}
-                      onSelect={() => setSelectedIdx(i)}
-                      onChange={(updated) => {
-                        const s = [...schema];
-                        s[i] = updated;
-                        setSchema(s);
-                      }}
-                      onRemove={() => {
-                        setSchema(schema.filter((_, j) => j !== i));
-                        setSelectedIdx(null);
-                      }}
-                      onDuplicate={() => duplicateField(i)}
-                    />
-                  ))}
+                  {schema.map((f, i) =>
+                    f.type === "step_break" ? (
+                      <StepBreakCard
+                        key={f.field_id}
+                        field={f}
+                        index={i}
+                        selected={selectedIdx === i}
+                        onSelect={() => setSelectedIdx(i)}
+                        onChange={(updated) => {
+                          const s = [...schema];
+                          s[i] = updated;
+                          setSchema(s);
+                        }}
+                        onRemove={() => {
+                          setSchema(schema.filter((_, j) => j !== i));
+                          setSelectedIdx(null);
+                        }}
+                      />
+                    ) : (
+                      <FieldCard
+                        key={f.field_id}
+                        field={f}
+                        index={i}
+                        selected={selectedIdx === i}
+                        onSelect={() => setSelectedIdx(i)}
+                        onChange={(updated) => {
+                          const s = [...schema];
+                          s[i] = updated;
+                          setSchema(s);
+                        }}
+                        onRemove={() => {
+                          setSchema(schema.filter((_, j) => j !== i));
+                          setSelectedIdx(null);
+                        }}
+                        onDuplicate={() => duplicateField(i)}
+                      />
+                    ),
+                  )}
                 </AnimatePresence>
               </Reorder.Group>
             )}
@@ -671,7 +803,7 @@ export function FormBuilder() {
                   <Eye className="h-4 w-4 text-sky-300" />
                   <span className="text-sm font-semibold text-slate-100">Preview</span>
                   <span className="ml-auto rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300">
-                    Field view
+                    {hasWizardSteps(schema) ? "Wizard" : "Field view"}
                   </span>
                 </div>
                 <div className="max-h-[70vh] overflow-y-auto p-4">
@@ -679,7 +811,14 @@ export function FormBuilder() {
                   <p className="mt-1 text-xs text-slate-500">{currentProject?.name}</p>
                   <div className="mt-4">
                     {schema.length > 0 ? (
-                      <DynamicForm schema={schema} values={previewValues} onChange={setPreviewValues} layout="stack" />
+                      <DynamicForm
+                        schema={schema}
+                        values={previewValues}
+                        onChange={setPreviewValues}
+                        layout="stack"
+                        submitLabel="Preview submit"
+                        onSubmit={() => {}}
+                      />
                     ) : (
                       <p className="py-10 text-center text-sm text-slate-500">Add questions to preview</p>
                     )}

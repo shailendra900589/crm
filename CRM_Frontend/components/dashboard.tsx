@@ -2,6 +2,7 @@
 
 import { DashboardFilters, FilterSummaryBanner } from "@/components/dashboard-filters";
 import { DynamicForm, FormLabel, formTextareaCls } from "@/components/dynamic-form";
+import { hasWizardSteps } from "@/lib/form-steps";
 import { SearchableSelect } from "@/components/searchable-select";
 import { api, getProjectId, onProjectChange, setProjectId, type DashboardFilters as DashboardFilterState, type LeadVisit, type RevisitLead } from "@/lib/api";
 import { useLivePulse } from "@/components/live-sync";
@@ -445,6 +446,9 @@ export function DashboardView() {
                     values={formData}
                     onChange={setFormData}
                     leadId={selectedLead ?? undefined}
+                    onSubmit={() => submitForm.mutate()}
+                    submitLabel={submitForm.isPending ? "Submitting…" : "Submit & Complete"}
+                    submitting={submitForm.isPending}
                   />
 
                   <div className="mt-5 space-y-3 border-t border-slate-200 pt-4 dark:border-slate-700">
@@ -456,6 +460,7 @@ export function DashboardView() {
                       value={remarks}
                       onChange={(e) => setRemarks(e.target.value)}
                     />
+                    {!hasWizardSteps(data.project_form.schema) && (
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       <Button
                         onClick={() => submitForm.mutate()}
@@ -466,6 +471,7 @@ export function DashboardView() {
                         {submitForm.isPending ? "Submitting…" : "Submit & Complete"}
                       </Button>
                     </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -661,7 +667,15 @@ export function DashboardView() {
                 <div className="divide-y divide-slate-100">
                   <div className="px-6 py-6">
                     <SectionDivider label="Form Details" />
-                    <DynamicForm schema={data.project_form.schema} values={visitModalFormData} onChange={setVisitModalFormData} leadId={activeVisit?.lead} />
+                    <DynamicForm
+                      schema={data.project_form.schema}
+                      values={visitModalFormData}
+                      onChange={setVisitModalFormData}
+                      leadId={activeVisit?.lead}
+                      onSubmit={() => submitVisitModal.mutate()}
+                      submitLabel={submitVisitModal.isPending ? "Submitting..." : "Submit & Complete"}
+                      submitting={submitVisitModal.isPending}
+                    />
                   </div>
                   <div className="bg-slate-50/60 px-6 py-5">
                     <FormLabel>Visit Remarks</FormLabel>
@@ -679,7 +693,7 @@ export function DashboardView() {
               )}
             </div>
             <div className="flex flex-wrap gap-2 border-t border-slate-100 bg-white px-6 py-4">
-              {data.project_form && (
+              {data.project_form && !hasWizardSteps(data.project_form.schema) && (
                 <Button
                   onClick={() => submitVisitModal.mutate()}
                   disabled={submitVisitModal.isPending}

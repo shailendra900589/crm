@@ -599,7 +599,8 @@ export type FormFieldType =
   | "dropdown"
   | "radio"
   | "multiselect"
-  | "file";
+  | "file"
+  | "step_break";
 
 /** Tags currency/number fields so dashboards can roll up Collection / Pending / Deal value */
 export type FormMetricRole = "collection" | "pending_amount" | "deal_value";
