@@ -25,7 +25,7 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type Role = AppRole;
@@ -77,12 +77,15 @@ const ROLE_THEME: Record<
 export function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const qc = useQueryClient();
   const { theme, toggleTheme } = useTheme();
   const { data: user, isError } = useQuery({ queryKey: ["me"], queryFn: api.me, retry: false });
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: api.projects });
   const [activeProject, setActiveProject] = useState<string>("");
   const [mobileOpen, setMobileOpen] = useState(false);
+  const embedMode =
+    searchParams.get("embed") === "1" && searchParams.get("mobile_app") === "1";
 
   const role = (user?.role || "BDM") as Role;
   const themeCfg = ROLE_THEME[role] || ROLE_THEME.BDM;
@@ -184,6 +187,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
   /** Admin uses org filters on the dashboard — no forced project chip in the chrome */
   const showProjectSwitcher = role !== "Admin";
   const isAdminSurface = role === "Admin" && pathname.startsWith("/admin");
+
+  if (embedMode) {
+    return (
+      <LiveSyncProvider scope={liveScopeForRole(user?.role)}>
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+          <div className="p-3 sm:p-4">{children}</div>
+        </div>
+      </LiveSyncProvider>
+    );
+  }
 
   return (
     <LiveSyncProvider scope={liveScopeForRole(user?.role)}>

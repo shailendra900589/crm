@@ -650,6 +650,8 @@ export type CrmUser = User & {
   email?: string;
   is_active_user?: boolean;
   allowed_pages?: string[];
+  crm_pro_mobile_access?: boolean;
+  crm_pro_mobile_reason?: string | null;
 };
 export type PagePermissionRow = {
   page_key: string;
@@ -696,7 +698,7 @@ export type RevisitLead = {
 
 export type Project = {
   id: number; name: string; slug: string; description: string; color: string;
-  is_active: boolean; lead_count?: number; product_count?: number; created_at: string;
+  is_active: boolean; crm_pro_mobile_enabled?: boolean; lead_count?: number; product_count?: number; created_at: string;
 };
 export type ProductItem = {
   id: number; project: number; project_name: string; name: string; slug: string;

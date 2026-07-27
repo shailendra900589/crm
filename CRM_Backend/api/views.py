@@ -135,14 +135,21 @@ class MeView(APIView):
 
     def get(self, request):
         from .page_access import allowed_pages_for_user
+        from .permissions import user_has_crm_pro_mobile_access
 
         data = UserSerializer(request.user).data
         data["allowed_pages"] = allowed_pages_for_user(request.user)
+        allowed = user_has_crm_pro_mobile_access(request.user)
+        data["crm_pro_mobile_access"] = allowed
+        data["crm_pro_mobile_reason"] = None if allowed else (
+            "CRM Pro mobile is not enabled for your account or project. Ask your Admin."
+        )
         return Response(data)
 
     def patch(self, request):
         """Update own profile (name, email, mobile). Role/projects are admin-only."""
         from .page_access import allowed_pages_for_user
+        from .permissions import user_has_crm_pro_mobile_access
 
         allowed = {"first_name", "last_name", "email", "mobile_number"}
         data = {k: v for k, v in request.data.items() if k in allowed}
@@ -152,6 +159,11 @@ class MeView(APIView):
             request.user.save(update_fields=list(data.keys()))
         payload = UserSerializer(request.user).data
         payload["allowed_pages"] = allowed_pages_for_user(request.user)
+        mobile_ok = user_has_crm_pro_mobile_access(request.user)
+        payload["crm_pro_mobile_access"] = mobile_ok
+        payload["crm_pro_mobile_reason"] = None if mobile_ok else (
+            "CRM Pro mobile is not enabled for your account or project. Ask your Admin."
+        )
         return Response(payload)
 
 

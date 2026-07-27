@@ -8,6 +8,10 @@ class Project(models.Model):
     description = models.TextField(blank=True)
     color = models.CharField(max_length=7, default="#2563eb")
     is_active = models.BooleanField(default=True)
+    crm_pro_mobile_enabled = models.BooleanField(
+        default=False,
+        help_text="When enabled, BDM/TL/Manager users on this project can open CRM Pro in Trackbook mobile.",
+    )
     created_by = models.ForeignKey(
         "User", null=True, blank=True, on_delete=models.SET_NULL, related_name="created_projects"
     )
@@ -49,6 +53,12 @@ class User(AbstractUser):
     )
     mobile_number = models.CharField(max_length=15, blank=True)
     is_active_user = models.BooleanField(default=True)
+    crm_pro_mobile_enabled = models.BooleanField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text="Override CRM Pro mobile access. Null = inherit from assigned projects.",
+    )
     assigned_projects = models.ManyToManyField(Project, related_name="assigned_users", blank=True)
 
 

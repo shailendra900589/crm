@@ -391,3 +391,26 @@ def aggregate_money_metrics(leads_qs, project_ids=None):
     except Exception:
         # Never take down dashboard / admin console for money rollups
         return empty
+
+
+def user_has_crm_pro_mobile_access(user) -> bool:
+    """Trackbook mobile CRM Pro — user must be active and enabled on user or project."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if not getattr(user, "is_active_user", True) or not user.is_active:
+        return False
+    if user.role == User.Role.ADMIN:
+        return True
+    explicit = getattr(user, "crm_pro_mobile_enabled", None)
+    if explicit is False:
+        return False
+    if explicit is True:
+        return True
+    from .models import Project
+
+    pids = project_ids_for_user(user)
+    if pids is None:
+        return Project.objects.filter(is_active=True, crm_pro_mobile_enabled=True).exists()
+    if not pids:
+        return False
+    return Project.objects.filter(id__in=pids, crm_pro_mobile_enabled=True).exists()

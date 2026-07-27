@@ -13,7 +13,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Project
-        fields = ["id", "name", "slug", "description", "color", "is_active", "lead_count", "product_count", "created_at"]
+        fields = ["id", "name", "slug", "description", "color", "is_active", "crm_pro_mobile_enabled", "lead_count", "product_count", "created_at"]
         read_only_fields = ["slug", "created_at"]
 
     def get_product_count(self, obj):
@@ -41,7 +41,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id", "username", "first_name", "last_name", "email", "role",
             "mobile_number", "reports_to", "reports_to_name", "is_active_user",
-            "assigned_project_ids",
+            "assigned_project_ids", "crm_pro_mobile_enabled",
         ]
 
     def get_reports_to_name(self, obj):
@@ -91,6 +91,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         fields = [
             "first_name", "last_name", "email", "role", "mobile_number",
             "reports_to", "is_active_user", "password", "assigned_projects",
+            "crm_pro_mobile_enabled",
         ]
 
     def update(self, instance, validated_data):

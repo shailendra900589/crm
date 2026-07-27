@@ -78,6 +78,7 @@ export function AdminProjectDetailPage({ projectId }: { projectId: number }) {
         description: editing!.description,
         color: editing!.color,
         is_active: editing!.is_active,
+        crm_pro_mobile_enabled: editing!.crm_pro_mobile_enabled ?? false,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["project", projectId] });
@@ -124,6 +125,14 @@ export function AdminProjectDetailPage({ projectId }: { projectId: number }) {
       qc.invalidateQueries({ queryKey: ["project", projectId] });
       qc.invalidateQueries({ queryKey: ["projects"] });
       qc.invalidateQueries({ queryKey: ["admin-dashboard"] });
+    });
+  };
+
+  const toggleCrmProMobile = () => {
+    if (!project) return;
+    api.updateProject(project.id, { crm_pro_mobile_enabled: !project.crm_pro_mobile_enabled }).then(() => {
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
     });
   };
 
@@ -180,6 +189,12 @@ export function AdminProjectDetailPage({ projectId }: { projectId: number }) {
                   <Badge
                     status={project.is_active ? "approved" : "rejected"}
                     label={project.is_active ? "Active" : "Inactive"}
+                  />
+                </button>
+                <button onClick={toggleCrmProMobile}>
+                  <Badge
+                    status={project.crm_pro_mobile_enabled ? "approved" : "rejected"}
+                    label={project.crm_pro_mobile_enabled ? "CRM Pro mobile" : "CRM Pro off"}
                   />
                 </button>
                 <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium">
@@ -459,6 +474,14 @@ export function AdminProjectDetailPage({ projectId }: { projectId: number }) {
                 />
                 <Input value={editing.color} onChange={(e) => setEditing({ ...editing, color: e.target.value })} />
               </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={editing.crm_pro_mobile_enabled === true}
+                  onChange={(e) => setEditing({ ...editing, crm_pro_mobile_enabled: e.target.checked })}
+                />
+                Allow CRM Pro in Trackbook mobile
+              </label>
             </div>
             <div className="mt-4 flex gap-2">
               <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => update.mutate()} disabled={update.isPending}>
