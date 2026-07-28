@@ -55,6 +55,7 @@ def verification_works_for_user(user):
         "lead",
         "lead__merchant",
         "lead__project",
+        "lead__project__custom_form",
         "lead__bdm",
         "assigned_to",
         "assigned_by",

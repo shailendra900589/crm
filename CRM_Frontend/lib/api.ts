@@ -801,9 +801,11 @@ export type UpdateUserData = Partial<Omit<CreateUserData, "username" | "password
 export type TeamReport = { team: Team; total_leads: number; confirmed: number; conversion: number; leaderboard: { bdm__first_name: string; bdm__username: string; total: number; confirmed: number }[] };
 export type ManagerSummary = { id: number; name: string; role: string; lead_count: number; confirmed: number; follow_ups_today: number };
 export type BulkJob = { id: number; status: string; total_rows: number; success_rows: number; error_log: { row?: number; error: string }[] };
+export type FormAnswerPreview = { field_id: string; label: string; value: string };
 export type FormSubmission = {
   id: number; lead: number; lead_name: string; project_name: string;
-  submitted_by: number; submitted_by_name: string; answers: Record<string, unknown>; submitted_at: string;
+  submitted_by: number; submitted_by_name: string; answers: Record<string, unknown>;
+  answer_preview?: FormAnswerPreview[]; answer_count?: number; submitted_at: string;
 };
 export type LeadVisit = {
   id: number; lead: number; lead_name: string; merchant_city: string; project_name: string;
@@ -975,6 +977,9 @@ export type VerificationWork = {
   assign_notes?: string;
   completion_notes?: string;
   allow_edit?: boolean;
+  answers?: Record<string, unknown>;
+  answer_preview?: FormAnswerPreview[];
+  form_schema?: { field_id: string; label: string; type: string; required?: boolean }[];
   completed_at?: string | null;
   created_at: string;
   updated_at?: string;

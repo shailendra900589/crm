@@ -337,9 +337,15 @@ class LeadUpdateSerializer(serializers.ModelSerializer):
             if key in validated_data:
                 setattr(instance.merchant, field, validated_data.pop(key))
         instance.merchant.save()
+        custom_changed = "custom_data" in validated_data
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+        if custom_changed:
+            from .form_sync import sync_lead_form_data
+
+            actor = self.context.get("request").user if self.context.get("request") else None
+            sync_lead_form_data(instance, instance.custom_data or {}, actor=actor, bump_submitted_at=True)
         return instance
 
 
@@ -432,17 +438,33 @@ class FormSubmissionSerializer(serializers.ModelSerializer):
     lead_name = serializers.CharField(source="lead.merchant.name", read_only=True)
     submitted_by_name = serializers.SerializerMethodField()
     project_name = serializers.CharField(source="custom_form.project.name", read_only=True)
+    answer_preview = serializers.SerializerMethodField()
+    answer_count = serializers.SerializerMethodField()
 
     class Meta:
         model = FormSubmission
         fields = [
             "id", "custom_form", "lead", "lead_name", "project_name",
-            "submitted_by", "submitted_by_name", "answers", "submitted_at",
+            "submitted_by", "submitted_by_name", "answers", "answer_preview", "answer_count", "submitted_at",
         ]
         read_only_fields = ["submitted_by", "submitted_at"]
 
     def get_submitted_by_name(self, obj):
         return obj.submitted_by.get_full_name() or obj.submitted_by.username
+
+    def get_answer_preview(self, obj):
+        from .form_sync import answer_preview
+
+        schema = []
+        try:
+            schema = obj.custom_form.schema or []
+        except Exception:
+            schema = []
+        return answer_preview(obj.answers or {}, schema)
+
+    def get_answer_count(self, obj):
+        answers = obj.answers or {}
+        return sum(1 for v in answers.values() if v not in (None, "", [], {}))
 
 
 class LeadVisitSerializer(serializers.ModelSerializer):
@@ -618,6 +640,9 @@ class VerificationWorkSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     document_status = serializers.CharField(source="document.verification_status", read_only=True, allow_null=True)
     merchant_city = serializers.CharField(source="lead.merchant.city", read_only=True)
+    answers = serializers.SerializerMethodField()
+    answer_preview = serializers.SerializerMethodField()
+    form_schema = serializers.SerializerMethodField()
 
     class Meta:
         model = VerificationWork
@@ -643,11 +668,47 @@ class VerificationWorkSerializer(serializers.ModelSerializer):
             "assign_notes",
             "completion_notes",
             "allow_edit",
+            "answers",
+            "answer_preview",
+            "form_schema",
             "completed_at",
             "created_at",
             "updated_at",
         ]
         read_only_fields = ["organization", "assigned_by", "completed_at", "created_at", "updated_at"]
+
+    def _resolved_answers(self, obj):
+        if obj.form_submission_id and getattr(obj.form_submission, "answers", None):
+            return obj.form_submission.answers or {}
+        return (obj.lead.custom_data or {}) if obj.lead_id else {}
+
+    def _schema(self, obj):
+        form = getattr(getattr(obj.lead, "project", None), "custom_form", None)
+        return (form.schema if form else None) or []
+
+    def get_answers(self, obj):
+        return self._resolved_answers(obj)
+
+    def get_answer_preview(self, obj):
+        from .form_sync import answer_preview
+
+        return answer_preview(self._resolved_answers(obj), self._schema(obj))
+
+    def get_form_schema(self, obj):
+        """Compact schema for verification desk display/edit."""
+        out = []
+        for f in self._schema(obj):
+            if not f.get("field_id"):
+                continue
+            out.append(
+                {
+                    "field_id": f.get("field_id"),
+                    "label": f.get("label") or f.get("field_id"),
+                    "type": f.get("type") or "text",
+                    "required": bool(f.get("required")),
+                }
+            )
+        return out
 
     def get_assigned_to_name(self, obj):
         if not obj.assigned_to_id:

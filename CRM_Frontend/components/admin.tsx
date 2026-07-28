@@ -507,7 +507,17 @@ export function AdminPanel() {
                           <p className="truncate text-[11px] text-slate-500">
                             {s.submitted_by_name}
                             {s.project_name ? ` · ${s.project_name}` : ""}
+                            {s.answer_count ? ` · ${s.answer_count} fields` : ""}
                           </p>
+                          {(s.answer_preview || []).length > 0 && (
+                            <div className="mt-1 space-y-0.5">
+                              {s.answer_preview!.slice(0, 3).map((a) => (
+                                <p key={a.field_id} className="truncate text-[10px] text-slate-500">
+                                  <span className="font-medium text-slate-400">{a.label}:</span> {a.value}
+                                </p>
+                              ))}
+                            </div>
+                          )}
                           <p className="mt-0.5 text-[10px] text-slate-600">{new Date(s.submitted_at).toLocaleString()}</p>
                         </div>
                         <ArrowRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-700 opacity-0 transition group-hover:opacity-100 group-hover:text-sky-300" />

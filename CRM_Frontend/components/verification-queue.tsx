@@ -160,7 +160,13 @@ export function VerificationQueueView() {
                   <p className="mt-0.5 text-xs text-slate-500">
                     {w.lead_name} · {w.project_name || "—"}
                     {w.assigned_to_name ? ` · → ${w.assigned_to_name}` : " · Unassigned"}
+                    {(w.answer_preview || []).length > 0 ? ` · ${w.answer_preview!.length} answers` : ""}
                   </p>
+                  {(w.answer_preview || []).length > 0 && (
+                    <p className="mt-1 truncate text-[11px] text-slate-400">
+                      {w.answer_preview!.slice(0, 2).map((a) => `${a.label}: ${a.value}`).join(" · ")}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <Link href={`/leads?lead=${w.lead}`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300">
@@ -181,6 +187,32 @@ export function VerificationQueueView() {
           <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white">{selected.title}</h3>
             <p className="mt-1 text-sm text-slate-500">{selected.lead_name} · {selected.status_display}</p>
+
+            {(selected.answer_preview || []).length > 0 && (
+              <div className="mt-4 max-h-48 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/60">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">BDM submitted data</p>
+                {(selected.form_schema || []).length > 0
+                  ? selected.form_schema!.map((f) => {
+                      const raw = selected.answers?.[f.field_id];
+                      const preview = (selected.answer_preview || []).find((a) => a.field_id === f.field_id);
+                      const val =
+                        preview?.value ??
+                        (raw == null || raw === "" ? "—" : typeof raw === "string" ? raw : JSON.stringify(raw));
+                      return (
+                        <div key={f.field_id} className="flex items-start justify-between gap-2 text-xs">
+                          <span className="shrink-0 font-medium text-slate-600 dark:text-slate-400">{f.label}</span>
+                          <span className="min-w-0 truncate text-right text-slate-900 dark:text-slate-100">{val}</span>
+                        </div>
+                      );
+                    })
+                  : selected.answer_preview!.map((a) => (
+                      <div key={a.field_id} className="flex items-start justify-between gap-2 text-xs">
+                        <span className="shrink-0 font-medium text-slate-600 dark:text-slate-400">{a.label}</span>
+                        <span className="min-w-0 truncate text-right text-slate-900 dark:text-slate-100">{a.value}</span>
+                      </div>
+                    ))}
+              </div>
+            )}
 
             {canAssign && ["open", "reopened", "assigned"].includes(selected.status) && (
               <div className="mt-4 space-y-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">

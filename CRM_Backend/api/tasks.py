@@ -330,35 +330,20 @@ def process_bulk_upload(job_id):
 
 
 
-                Lead.objects.create(
-
-
-
+                lead = Lead.objects.create(
                     project=job.project,
-
-
-
                     merchant=merchant,
-
-
-
                     bdm=job.uploaded_by,
-
-
-
                     status=str(data.get("status") or "interested"),
-
-
-
                     notes=str(data.get("notes") or ""),
-
-
-
                     custom_data=custom_data,
-
-
-
                 )
+                if custom_data:
+                    try:
+                        from .form_sync import sync_lead_form_data
+                        sync_lead_form_data(lead, custom_data, actor=job.uploaded_by, bump_submitted_at=True)
+                    except Exception:
+                        pass
 
 
 

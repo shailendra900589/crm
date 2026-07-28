@@ -1674,6 +1674,11 @@ class LeadViewSet(viewsets.ModelViewSet):
             doc.verification_status = LeadDocument.VerificationStatus.PENDING
             doc.verified_by = None
         doc.save()
+        if changed:
+            from .form_sync import sync_lead_form_data
+
+            # Sync FormSubmission from current custom_data + open verification queue
+            sync_lead_form_data(lead, lead.custom_data or {}, actor=request.user, bump_submitted_at=True)
         return Response(LeadDocumentSerializer(doc, context={"request": request}).data)
 
     @action(detail=True, methods=["get"], url_path="download-document")
@@ -1745,10 +1750,12 @@ class LeadViewSet(viewsets.ModelViewSet):
             url = request.build_absolute_uri(url)
 
         # Persist immediately so Docs tab / dashboards see the file even before form submit
+        from .form_sync import sync_lead_form_data
+
         custom = dict(lead.custom_data or {})
         custom[field_id] = url
-        lead.custom_data = custom
-        lead.save(update_fields=["custom_data"])
+        # Sync custom_data + FormSubmission + verification (file alone still counts)
+        sync_lead_form_data(lead, custom, actor=request.user, bump_submitted_at=True)
 
         # Mark documents pack as pending verification for Manager/TL/Admin
         doc, _ = LeadDocument.objects.get_or_create(lead=lead)
@@ -1776,14 +1783,6 @@ class LeadViewSet(viewsets.ModelViewSet):
         doc.verification_status = LeadDocument.VerificationStatus.PENDING
         doc.verified_by = None
         doc.save()
-
-        # Ensure verification queue shows this upload even before full form submit
-        try:
-            from .workflow_views import ensure_verification_work_for_submission
-
-            ensure_verification_work_for_submission(lead, actor=request.user)
-        except Exception:
-            pass
 
         return Response({"url": url, "name": safe_name, "path": path, "field_id": field_id})
 
@@ -1937,41 +1936,13 @@ class LeadViewSet(viewsets.ModelViewSet):
                 if f.get("metric_role") == "collection" and f.get("field_id"):
                     answers.pop(f["field_id"], None)
 
-        # Keep previously uploaded file URLs if client omitted them on re-submit
-        merged = dict(lead.custom_data or {})
-        merged.update(answers or {})
-        for f in form.schema or []:
-            if f.get("type") == "file" and f.get("field_id"):
-                fid = f["field_id"]
-                if not merged.get(fid) and (lead.custom_data or {}).get(fid):
-                    merged[fid] = lead.custom_data[fid]
-        answers = merged
+        from .form_sync import sync_lead_form_data
 
-        lead.custom_data = answers
-        lead.save(update_fields=["custom_data"])
-        now = timezone.now()
-        sub, _ = FormSubmission.objects.update_or_create(
-            lead=lead,
-            custom_form=form,
-            defaults={
-                "submitted_by": request.user,
-                "answers": answers,
-                "submitted_at": now,
-            },
-        )
+        sub = sync_lead_form_data(lead, answers, actor=request.user, form=form)
+        if not sub:
+            return Response({"detail": "Could not save form submission."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Every form submission enters the verification queue (docs + form review)
         from .workflow_views import ensure_verification_work_for_submission
-
-        doc, _ = LeadDocument.objects.get_or_create(lead=lead)
-        has_files = any(
-            f.get("type") == "file" and answers.get(f.get("field_id"))
-            for f in (form.schema or [])
-        )
-        if has_files or doc.gst_file or doc.pan_file or doc.cheque_file:
-            doc.verification_status = LeadDocument.VerificationStatus.PENDING
-            doc.verified_by = None
-            doc.save(update_fields=["verification_status", "verified_by"])
 
         work = ensure_verification_work_for_submission(lead, sub, actor=request.user)
         # Notify BDM's reporting chain + project admins to assign Ops

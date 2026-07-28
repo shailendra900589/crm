@@ -638,7 +638,16 @@ export function DashboardView() {
                     <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-[13px] font-semibold text-slate-900 group-hover:text-blue-700 dark:text-slate-100 dark:group-hover:text-blue-300">{s.lead_name}</p>
-                      <p className="text-[11px] text-slate-500">{s.submitted_by_name}</p>
+                      <p className="text-[11px] text-slate-500">{s.submitted_by_name}{s.answer_count ? ` · ${s.answer_count} fields` : ""}</p>
+                      {(s.answer_preview || []).length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {s.answer_preview!.slice(0, 3).map((a) => (
+                            <p key={a.field_id} className="truncate text-[10px] text-slate-500">
+                              <span className="font-medium text-slate-600 dark:text-slate-400">{a.label}:</span> {a.value}
+                            </p>
+                          ))}
+                        </div>
+                      )}
                       <p className="mt-0.5 text-[10px] text-slate-400">{new Date(s.submitted_at).toLocaleString()}</p>
                     </div>
                     <ArrowRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-300 opacity-0 transition group-hover:opacity-100" />

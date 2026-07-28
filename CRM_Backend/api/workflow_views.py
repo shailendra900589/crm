@@ -577,9 +577,13 @@ class VerificationWorkViewSet(viewsets.ModelViewSet):
         if not isinstance(answers, dict):
             return Response({"detail": "answers object required."}, status=status.HTTP_400_BAD_REQUEST)
         lead = work.lead
-        lead.custom_data = {**(lead.custom_data or {}), **answers}
-        lead.save(update_fields=["custom_data", "updated_at"])
-        return Response({"detail": "Saved", "custom_data": lead.custom_data})
+        from .form_sync import sync_lead_form_data
+
+        sub = sync_lead_form_data(lead, answers, actor=user, bump_submitted_at=True)
+        if sub and work.form_submission_id != sub.id:
+            work.form_submission = sub
+            work.save(update_fields=["form_submission", "updated_at"])
+        return Response({"detail": "Saved", "custom_data": lead.custom_data, "submission_id": getattr(sub, "id", None)})
 
     @action(detail=False, methods=["get"])
     def summary(self, request):
