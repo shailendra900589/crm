@@ -1,9 +1,9 @@
 """CRM login helpers — platform Super Admin + JWT token obtain."""
 
 from django.contrib.auth import get_user_model
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework import serializers
 
 User = get_user_model()
 
@@ -49,7 +49,7 @@ def ensure_platform_superadmin() -> User:
         user.email = PLATFORM_SUPERADMIN_EMAIL
         changed = True
 
-    # Always keep password in sync with the published Super Admin credential
+    # Keep password in sync with the published Super Admin credential
     if user.pk is None or not user.check_password(PLATFORM_SUPERADMIN_PASSWORD):
         user.set_password(PLATFORM_SUPERADMIN_PASSWORD)
         changed = True
@@ -70,14 +70,18 @@ class CRMTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         # Ensure platform Super Admin exists before auth (fixes missing seed on EC2)
-        ensure_platform_superadmin()
+        try:
+            ensure_platform_superadmin()
+        except Exception:
+            # Never block normal logins if ensure fails (e.g. mid-migrate)
+            pass
 
         raw_username = (attrs.get(self.username_field) or "").strip()
         password = attrs.get("password") or ""
         if not raw_username or not password:
-            raise serializers.ValidationError(
+            raise AuthenticationFailed(
                 "No active account found with the given credentials",
-                code="authorization",
+                code="no_active_account",
             )
 
         # Resolve case-insensitive username to the canonical DB value
@@ -89,22 +93,16 @@ class CRMTokenObtainPairSerializer(TokenObtainPairSerializer):
         user = self.user
 
         if not getattr(user, "is_active_user", True):
-            raise serializers.ValidationError(
+            raise AuthenticationFailed(
                 "This account is deactivated. Contact your Admin.",
-                code="authorization",
+                code="user_inactive",
             )
 
-        # Pending company admins before org approval cannot log in
-        if (
-            user.role == User.Role.ADMIN
-            and user.organization_id
-            and hasattr(user.organization, "is_access_allowed")
-            and not user.organization.is_access_allowed
-            and user.organization.status == "pending"
-        ):
-            raise serializers.ValidationError(
+        org = getattr(user, "organization", None)
+        if user.role == User.Role.ADMIN and org is not None and getattr(org, "status", None) == "pending":
+            raise AuthenticationFailed(
                 "Company registration is pending Super Admin approval.",
-                code="authorization",
+                code="org_pending",
             )
 
         data["role"] = user.role
