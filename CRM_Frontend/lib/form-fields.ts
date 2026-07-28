@@ -117,6 +117,35 @@ export function schemaForFill(schema: FormField[] | undefined | null, enableColl
   return list.filter((f) => f.metric_role !== "collection");
 }
 
+/** Drop legacy seed junk (GST4000 / Retail) and keys not in the current form schema. */
+export function valuesForSchema(
+  schema: FormField[] | undefined | null,
+  customData: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  const ids = new Set((schema || []).map((f) => f.field_id).filter(Boolean));
+  const out: Record<string, unknown> = {};
+  const data = customData || {};
+  for (const [key, value] of Object.entries(data)) {
+    if (ids.size && !ids.has(key)) continue;
+    if (isSeedJunkValue(key, value)) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+function isSeedJunkValue(fieldId: string, value: unknown): boolean {
+  if (value == null || value === "") return false;
+  const fid = fieldId.toLowerCase();
+  const s = String(value).trim();
+  if (/^GST\d+000$/i.test(s)) return true;
+  if ((fid.includes("mobile") || fid.includes("phone") || fid === "business_type") && s.toLowerCase() === "retail") {
+    return true;
+  }
+  if (fid === "gst_number" && /^GST/i.test(s)) return true;
+  if (fid === "business_type" && s.toLowerCase() === "retail") return true;
+  return false;
+}
+
 export function isFullWidthField(type: string) {
   return type === "textarea" || type === "multiselect" || type === "file" || type === "radio";
 }

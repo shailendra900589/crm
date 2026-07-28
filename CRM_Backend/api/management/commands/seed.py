@@ -5,6 +5,7 @@ from django.core.management.base import BaseCommand
 from django.utils.text import slugify
 
 from api.models import CustomForm, FormSubmission, Lead, LeadVisit, Merchant, Organization, Product, Project, Team
+from api.form_sync import scrub_seed_form_junk
 
 User = get_user_model()
 
@@ -195,12 +196,7 @@ class Command(BaseCommand):
                     },
                 )
                 product = products[i % len(products)] if products else None
-                custom_data = {
-                    "gst_number": f"GST{i}000",
-                    "business_type": "Retail",
-                    "pending_amount": (i + 1) * 2500,
-                    "amount_collected": i * 1000,
-                }
+                custom_data = {}  # Never pre-fill form answers — BDM starts blank
                 lead, lead_created = Lead.objects.get_or_create(
                     project=project, merchant=merchant, bdm=bdm,
                     defaults={
@@ -211,19 +207,10 @@ class Command(BaseCommand):
                         "custom_data": custom_data,
                     },
                 )
-                if not lead_created and not (lead.custom_data or {}):
-                    lead.custom_data = custom_data
-                    lead.save(update_fields=["custom_data"])
-                form = getattr(project, "custom_form", None)
-                if form and (lead.custom_data or {}):
-                    FormSubmission.objects.update_or_create(
-                        lead=lead,
-                        custom_form=form,
-                        defaults={
-                            "submitted_by": bdm,
-                            "answers": lead.custom_data,
-                        },
-                    )
+                # Strip legacy seed junk (GST4000 / Retail) so renamed form fields stay empty
+                if scrub_seed_form_junk(lead):
+                    pass
+                # Do not auto-create FormSubmission from empty/seed data
 
         for project in projects:
             leads = Lead.objects.filter(project=project, bdm=bdm)[:3]

@@ -32,7 +32,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { formatINR, schemaForFill } from "@/lib/form-fields";
+import { formatINR, schemaForFill, valuesForSchema } from "@/lib/form-fields";
 
 const COLORS = ["#7c3aed", "#2563eb", "#10b981", "#f59e0b", "#f43f5e"];
 const STATUS_LABELS: Record<string, string> = {
@@ -140,13 +140,14 @@ export function DashboardView() {
     if (leads.length && !selectedLead) setSelectedLead(leads[0].id);
   }, [leads, selectedLead]);
 
+  const fillSchema = useMemo(
+    () => schemaForFill(data?.project_form?.schema, data?.project_form?.enable_collection),
+    [data?.project_form?.schema, data?.project_form?.enable_collection],
+  );
+
   useEffect(() => {
-    if (modalLead?.custom_data) {
-      setVisitModalFormData(modalLead.custom_data as Record<string, unknown>);
-    } else {
-      setVisitModalFormData({});
-    }
-  }, [modalLead]);
+    setVisitModalFormData(valuesForSchema(fillSchema, modalLead?.custom_data as Record<string, unknown>));
+  }, [modalLead, fillSchema]);
 
   useEffect(() => {
     if (activeVisit) setVisitModalRemarks("");
@@ -154,9 +155,8 @@ export function DashboardView() {
 
   useEffect(() => {
     const lead = leads.find((l) => l.id === selectedLead);
-    if (lead?.custom_data) setFormData(lead.custom_data as Record<string, unknown>);
-    else setFormData({});
-  }, [selectedLead, leads]);
+    setFormData(valuesForSchema(fillSchema, lead?.custom_data as Record<string, unknown>));
+  }, [selectedLead, leads, fillSchema]);
 
   const submitForm = useMutation({
     mutationFn: () =>
@@ -164,7 +164,7 @@ export function DashboardView() {
         visit_id: data?.upcoming_visits?.find((v) => v.lead === selectedLead)?.id,
         remarks,
       }),
-    onSuccess: () => {
+    onSuccess: (sub) => {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["visits"] });
@@ -172,6 +172,7 @@ export function DashboardView() {
       qc.invalidateQueries({ queryKey: ["verification-works"] });
       qc.invalidateQueries({ queryKey: ["verification-summary"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      if (sub?.answers) setFormData(valuesForSchema(fillSchema, sub.answers));
       setRemarks("");
     },
   });
@@ -182,7 +183,7 @@ export function DashboardView() {
         visit_id: activeVisit!.id,
         remarks: visitModalRemarks,
       }),
-    onSuccess: () => {
+    onSuccess: (sub) => {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["visits"] });
@@ -190,15 +191,11 @@ export function DashboardView() {
       qc.invalidateQueries({ queryKey: ["verification-works"] });
       qc.invalidateQueries({ queryKey: ["verification-summary"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      if (sub?.answers) setVisitModalFormData(valuesForSchema(fillSchema, sub.answers));
       setActiveVisit(null);
       setVisitModalRemarks("");
     },
   });
-
-  const fillSchema = useMemo(
-    () => schemaForFill(data?.project_form?.schema, data?.project_form?.enable_collection),
-    [data?.project_form?.schema, data?.project_form?.enable_collection],
-  );
 
   const assignVisit = useMutation({
     mutationFn: () =>

@@ -7,7 +7,7 @@ import { DynamicForm } from "@/components/dynamic-form";
 import { hasWizardSteps } from "@/lib/form-steps";
 import { LeadActivityTimeline } from "@/components/lead-activity";
 import { api, fileUrl, getProjectId, onProjectChange, LEAD_STATUSES, type CallOutcome, type CreateLeadData, type Lead, type UpdateLeadData } from "@/lib/api";
-import { schemaForFill } from "@/lib/form-fields";
+import { schemaForFill, valuesForSchema } from "@/lib/form-fields";
 import { LogCallForm } from "@/components/log-call";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -723,13 +723,16 @@ function LeadDetailModal({
 
   const submitForm = useMutation({
     mutationFn: () => api.submitForm(lead!.id, formData),
-    onSuccess: () => {
+    onSuccess: (sub) => {
       qc.invalidateQueries({ queryKey: ["lead", lead?.id] });
       qc.invalidateQueries({ queryKey: ["lead-activity", lead?.id] });
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["admin-dashboard"] });
       qc.invalidateQueries({ queryKey: ["visits"] });
+      qc.invalidateQueries({ queryKey: ["verification-works"] });
+      qc.invalidateQueries({ queryKey: ["verification-summary"] });
+      if (sub?.answers) setFormData(valuesForSchema(fillSchema, sub.answers));
     },
   });
 
@@ -751,8 +754,8 @@ function LeadDetailModal({
   }, [customForm?.schema, l?.custom_data]);
 
   useEffect(() => {
-    if (l?.custom_data) setFormData(l.custom_data as Record<string, unknown>);
-  }, [l]);
+    setFormData(valuesForSchema(fillSchema, l?.custom_data as Record<string, unknown>));
+  }, [l, fillSchema]);
 
   useEffect(() => {
     if (lead) setTab("profile");

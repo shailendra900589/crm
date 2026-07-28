@@ -2,10 +2,74 @@
 
 from __future__ import annotations
 
+import re
+
 from django.utils import timezone
 
 from .models import CustomForm, FormSubmission, Lead, LeadDocument
 from .permissions import effective_form_schema
+
+# Legacy demo seed values that show up when Admin renames GST/Business Type labels
+_SEED_GST_RE = re.compile(r"^GST\d+000$", re.I)
+_SEED_JUNK_KEYS = {
+    "gst_number",
+    "business_type",
+    "pending_amount",
+    "amount_collected",
+    "gst_certificate",
+    "annual_revenue",
+}
+
+
+def is_seed_junk_value(field_id: str, value) -> bool:
+    """True for demo seed placeholders like GST4000 / Retail."""
+    if value in (None, "", [], {}):
+        return False
+    fid = (field_id or "").lower()
+    s = str(value).strip()
+    if fid in ("gst_number", "gst") and _SEED_GST_RE.match(s):
+        return True
+    if fid in ("business_type", "business") and s.lower() == "retail":
+        return True
+    # Renamed labels still using old seed values
+    if _SEED_GST_RE.match(s):
+        return True
+    if fid.endswith("mobile") or "mobile" in fid or "phone" in fid:
+        if s.lower() == "retail":
+            return True
+    if ("merchant" in fid or "name" in fid) and _SEED_GST_RE.match(s):
+        return True
+    return False
+
+
+def scrub_seed_form_junk(lead: Lead, *, sync_submission: bool = True) -> bool:
+    """
+    Remove legacy seed answers (GST4000, Retail, demo money) from lead.custom_data
+    and matching FormSubmission so BDM form starts clean / shows real submits only.
+    """
+    data = dict(lead.custom_data or {})
+    if not data:
+        return False
+    changed = False
+    for key in list(data.keys()):
+        val = data.get(key)
+        if key in _SEED_JUNK_KEYS or is_seed_junk_value(key, val):
+            # Only strip classic seed money when clearly demo amounts on seed keys
+            if key in ("pending_amount", "amount_collected", "annual_revenue") and key in _SEED_JUNK_KEYS:
+                data.pop(key, None)
+                changed = True
+            elif is_seed_junk_value(key, val) or key in ("gst_number", "business_type", "gst_certificate"):
+                data.pop(key, None)
+                changed = True
+    if not changed:
+        return False
+    lead.custom_data = data
+    lead.save(update_fields=["custom_data", "updated_at"])
+    if sync_submission:
+        form = project_form_for_lead(lead)
+        if form:
+            FormSubmission.objects.filter(lead=lead, custom_form=form).update(answers=data)
+    return True
 
 
 def project_form_for_lead(lead: Lead) -> CustomForm | None:
@@ -16,16 +80,39 @@ def project_form_for_lead(lead: Lead) -> CustomForm | None:
 
 
 def merge_form_answers(lead: Lead, answers: dict | None, form: CustomForm | None = None) -> dict:
-    """Merge incoming answers with existing custom_data; preserve prior file URLs."""
+    """Merge incoming answers with existing custom_data; preserve prior file URLs; drop seed junk."""
     form = form or project_form_for_lead(lead)
-    merged = dict(lead.custom_data or {})
-    merged.update(answers or {})
     schema = (form.schema if form else None) or []
+    schema_ids = {f.get("field_id") for f in schema if f.get("field_id")}
+
+    merged = dict(lead.custom_data or {})
+    # Drop legacy seed junk before merge so GST4000/Retail never stick on renamed fields
+    for key in list(merged.keys()):
+        if is_seed_junk_value(key, merged.get(key)) or (
+            key in _SEED_JUNK_KEYS and key not in (answers or {})
+        ):
+            # Keep non-junk user values on seed keys; strip only junk-looking values
+            if is_seed_junk_value(key, merged.get(key)):
+                merged.pop(key, None)
+
+    merged.update(answers or {})
     for f in schema:
         if f.get("type") == "file" and f.get("field_id"):
             fid = f["field_id"]
             if not merged.get(fid) and (lead.custom_data or {}).get(fid):
-                merged[fid] = lead.custom_data[fid]
+                prev = lead.custom_data[fid]
+                if not is_seed_junk_value(fid, prev):
+                    merged[fid] = prev
+
+    # Prefer schema keys for persistence clarity (keep extras that are files/urls too)
+    if schema_ids:
+        cleaned = {}
+        for k, v in merged.items():
+            if k in schema_ids or (isinstance(v, str) and ("/media/" in v or v.startswith("http"))):
+                if is_seed_junk_value(k, v):
+                    continue
+                cleaned[k] = v
+        merged = cleaned
     return merged
 
 

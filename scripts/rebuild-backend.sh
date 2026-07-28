@@ -16,8 +16,8 @@ echo "Rebuilding backend (+ celery) so Super Admin login code is live..."
 sudo "${DC[@]}" -f docker-compose.prod.yml --env-file .env.prod build --no-cache backend celery-worker celery-beat
 sudo "${DC[@]}" -f docker-compose.prod.yml --env-file .env.prod up -d backend celery-worker celery-beat nginx
 
-echo "Waiting for backend health..."
-sleep 8
-sudo "${DC[@]}" -f docker-compose.prod.yml --env-file .env.prod exec -T backend python manage.py ensure_superadmin || true
+echo "Cleaning legacy seed form junk (GST4000/Retail)..."
+sudo "${DC[@]}" -f docker-compose.prod.yml --env-file .env.prod exec -T backend python manage.py clean_seed_form_data || true
+sudo "${DC[@]}" -f docker-compose.prod.yml --env-file .env.prod exec -T backend python manage.py backfill_form_submissions || true
 
 echo "Done. Login: Rahul / India@1432 on https://crm.trackbook.co"
