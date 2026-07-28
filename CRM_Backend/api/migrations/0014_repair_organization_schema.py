@@ -1,6 +1,6 @@
 """
-Repair helper if 0013 partially applied / rolled back oddly on Postgres.
-Idempotent: creates missing tables/columns then seeds default org.
+Repair helper if 0013 left the DB in a mixed state.
+Fully idempotent: never fails if tables/columns/indexes already exist.
 """
 
 from django.db import migrations
@@ -12,10 +12,22 @@ def repair_and_seed(apps, schema_editor):
     now = timezone.now()
     conn = schema_editor.connection
     with conn.cursor() as cursor:
-        # Organization table
+
+        def exec_ignore(sql, params=None):
+            try:
+                cursor.execute(sql, params or [])
+            except Exception:
+                conn.rollback()
+                # Re-open savepoint-friendly path: Django wraps migrations in a
+                # transaction; after rollback we must not abort the whole migrate.
+                # Prefer exception-safe DO blocks below instead.
+                raise
+
+        # Prefer DO blocks that swallow duplicate_object / duplicate_table.
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS api_organization (
+            DO $$ BEGIN
+              CREATE TABLE IF NOT EXISTS api_organization (
                 id bigserial PRIMARY KEY,
                 name varchar(200) NOT NULL,
                 slug varchar(50) NOT NULL UNIQUE,
@@ -34,14 +46,27 @@ def repair_and_seed(apps, schema_editor):
                 created_at timestamptz NOT NULL DEFAULT NOW(),
                 approved_at timestamptz NULL,
                 approved_by_id integer NULL REFERENCES api_user(id) ON DELETE SET NULL
-            )
+              );
+            EXCEPTION
+              WHEN duplicate_table THEN NULL;
+              WHEN unique_violation THEN NULL;
+            END $$;
             """
         )
+
+        # Status index — ignore if Django already created api_organization_status_idx
         cursor.execute(
-            "CREATE INDEX IF NOT EXISTS api_organization_status_idx ON api_organization (status)"
+            """
+            DO $$ BEGIN
+              CREATE INDEX api_organization_status_idx ON api_organization (status);
+            EXCEPTION
+              WHEN duplicate_table THEN NULL;
+              WHEN unique_violation THEN NULL;
+              WHEN duplicate_object THEN NULL;
+            END $$;
+            """
         )
 
-        # User columns
         cursor.execute(
             """
             DO $$ BEGIN
@@ -80,8 +105,6 @@ def repair_and_seed(apps, schema_editor):
             END $$;
             """
         )
-
-        # Project.organization_id
         cursor.execute(
             """
             DO $$ BEGIN
@@ -97,10 +120,10 @@ def repair_and_seed(apps, schema_editor):
             """
         )
 
-        # VerificationWork table
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS api_verificationwork (
+            DO $$ BEGIN
+              CREATE TABLE IF NOT EXISTS api_verificationwork (
                 id bigserial PRIMARY KEY,
                 title varchar(200) NOT NULL DEFAULT 'Verify documents',
                 status varchar(20) NOT NULL DEFAULT 'open',
@@ -118,14 +141,25 @@ def repair_and_seed(apps, schema_editor):
                 form_submission_id bigint NULL REFERENCES api_formsubmission(id) ON DELETE SET NULL,
                 lead_id bigint NOT NULL REFERENCES api_lead(id) ON DELETE CASCADE,
                 organization_id bigint NULL REFERENCES api_organization(id) ON DELETE CASCADE
-            )
+              );
+            EXCEPTION
+              WHEN duplicate_table THEN NULL;
+              WHEN unique_violation THEN NULL;
+            END $$;
             """
         )
         cursor.execute(
-            "CREATE INDEX IF NOT EXISTS api_verificationwork_status_idx ON api_verificationwork (status)"
+            """
+            DO $$ BEGIN
+              CREATE INDEX api_verificationwork_status_idx ON api_verificationwork (status);
+            EXCEPTION
+              WHEN duplicate_table THEN NULL;
+              WHEN unique_violation THEN NULL;
+              WHEN duplicate_object THEN NULL;
+            END $$;
+            """
         )
 
-        # Default org + backfill
         cursor.execute("SELECT id FROM api_organization WHERE slug = %s", ["default"])
         row = cursor.fetchone()
         if row:
