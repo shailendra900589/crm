@@ -219,10 +219,10 @@ export function DashboardView() {
     return <DashboardSkeleton />;
   }
 
-  const disposition = data.disposition.map((d) => ({
+  const disposition = (data.disposition || []).map((d) => ({
     name: STATUS_LABELS[d.status] || d.status, value: d.count,
   }));
-  const leaderboard = data.leaderboard.map((l) => ({
+  const leaderboard = (data.leaderboard || []).map((l) => ({
     name: l.bdm__first_name || l.bdm__username, confirmed: l.confirmed,
   }));
 

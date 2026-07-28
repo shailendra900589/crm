@@ -181,7 +181,7 @@ class AdminPagePermissionsView(APIView):
             raise PermissionDenied("Only Admin can view page permissions.")
         from .page_access import page_permissions_matrix
 
-        return Response(page_permissions_matrix())
+        return Response({"pages": page_permissions_matrix()})
 
     def put(self, request):
         if not is_admin(request.user):
@@ -194,7 +194,7 @@ class AdminPagePermissionsView(APIView):
         if not isinstance(items, list):
             return Response({"detail": "permissions must be a list."}, status=status.HTTP_400_BAD_REQUEST)
 
-        valid_roles = {User.Role.MANAGER, User.Role.TL, User.Role.BDM}
+        valid_roles = {User.Role.MANAGER, User.Role.TL, User.Role.BDM, User.Role.OPS}
         updated = 0
         for item in items:
             page_key = (item.get("page_key") or "").strip()
@@ -219,7 +219,7 @@ class AdminPagePermissionsView(APIView):
             message=f"Updated {updated} page permission rows",
             meta={"count": updated},
         )
-        return Response(page_permissions_matrix())
+        return Response({"pages": page_permissions_matrix()})
 
 
 class ChangePasswordView(APIView):

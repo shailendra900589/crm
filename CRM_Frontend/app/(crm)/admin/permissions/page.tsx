@@ -5,7 +5,7 @@ import { RequireRole } from "@/components/role-gate";
 
 export default function AdminPermissionsPage() {
   return (
-    <RequireRole roles={["Admin"]}>
+    <RequireRole roles={["Admin", "SuperAdmin"]}>
       <AdminPagePermissions />
     </RequireRole>
   );

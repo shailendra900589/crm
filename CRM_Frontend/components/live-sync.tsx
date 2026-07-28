@@ -21,7 +21,8 @@ export function useLivePulse() {
 }
 
 export function liveScopeForRole(role?: string) {
-  if (role === "Admin") return "admin";
+  if (role === "Admin" || role === "SuperAdmin") return "admin";
   if (role === "Manager" || role === "TL") return "manager";
+  if (role === "Ops") return "manager";
   return "bdm";
 }

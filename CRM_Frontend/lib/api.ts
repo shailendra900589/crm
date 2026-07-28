@@ -755,7 +755,7 @@ export type PagePermissionRow = {
   href: string;
   description?: string;
   locked?: boolean;
-  roles: { Manager: boolean; TL: boolean; BDM: boolean };
+  roles: { Manager: boolean; TL: boolean; BDM: boolean; Ops?: boolean };
 };
 export type PagePermissionMatrix = { pages: PagePermissionRow[] };
 export type CreateUserData = {

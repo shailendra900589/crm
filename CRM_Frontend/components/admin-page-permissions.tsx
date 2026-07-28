@@ -1,19 +1,35 @@
 "use client";
 
 import { Button } from "@/components/ui";
-import { api, type PagePermissionMatrix } from "@/lib/api";
+import { api, type PagePermissionMatrix, type PagePermissionRow } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, KeyRound, RotateCcw, Save, Shield } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-const ROLES = ["Manager", "TL", "BDM"] as const;
+const ROLES = ["Manager", "TL", "BDM", "Ops"] as const;
+
+function normalizeMatrix(raw: unknown): PagePermissionMatrix | null {
+  if (!raw) return null;
+  if (Array.isArray(raw)) {
+    return { pages: raw as PagePermissionRow[] };
+  }
+  if (typeof raw === "object" && Array.isArray((raw as PagePermissionMatrix).pages)) {
+    return raw as PagePermissionMatrix;
+  }
+  return null;
+}
 
 export function AdminPagePermissions() {
   const qc = useQueryClient();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["page-permissions"],
-    queryFn: api.pagePermissions,
+    queryFn: async () => {
+      const raw = await api.pagePermissions();
+      const matrix = normalizeMatrix(raw);
+      if (!matrix) throw new Error("Invalid permissions payload");
+      return matrix;
+    },
   });
   const [draft, setDraft] = useState<PagePermissionMatrix | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -29,15 +45,16 @@ export function AdminPagePermissions() {
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!draft) return null;
+      if (!draft?.pages) return null;
       const permissions = draft.pages.flatMap((page) =>
         ROLES.map((role) => ({
           page_key: page.page_key,
           role,
-          enabled: page.locked ? true : !!page.roles[role],
+          enabled: page.locked ? true : !!(page.roles && page.roles[role]),
         })),
       );
-      return api.updatePagePermissions(permissions);
+      const raw = await api.updatePagePermissions(permissions);
+      return normalizeMatrix(raw);
     },
     onSuccess: (result) => {
       if (result) {
@@ -52,14 +69,13 @@ export function AdminPagePermissions() {
 
   const toggle = (pageKey: string, role: (typeof ROLES)[number]) => {
     setDraft((prev) => {
-      if (!prev) return prev;
+      if (!prev?.pages) return prev;
       return {
         pages: prev.pages.map((p) => {
           if (p.page_key !== pageKey || p.locked) return p;
-          return {
-            ...p,
-            roles: { ...p.roles, [role]: !p.roles[role] },
-          };
+          const roles = { ...(p.roles || {}) } as PagePermissionRow["roles"];
+          roles[role] = !roles[role];
+          return { ...p, roles };
         }),
       };
     });
@@ -67,23 +83,19 @@ export function AdminPagePermissions() {
 
   const setRoleColumn = (role: (typeof ROLES)[number], enabled: boolean) => {
     setDraft((prev) => {
-      if (!prev) return prev;
+      if (!prev?.pages) return prev;
       return {
         pages: prev.pages.map((p) =>
           p.locked
             ? p
             : {
                 ...p,
-                roles: { ...p.roles, [role]: enabled },
+                roles: { ...(p.roles || {}), [role]: enabled } as PagePermissionRow["roles"],
               },
         ),
       };
     });
   };
-
-  if (isLoading || !draft) {
-    return <div className="h-72 animate-pulse rounded-2xl bg-slate-900" />;
-  }
 
   if (isError) {
     return (
@@ -94,6 +106,10 @@ export function AdminPagePermissions() {
         </button>
       </div>
     );
+  }
+
+  if (isLoading || !draft?.pages) {
+    return <div className="h-72 animate-pulse rounded-2xl bg-slate-900" />;
   }
 
   return (
@@ -107,7 +123,7 @@ export function AdminPagePermissions() {
             </div>
             <h2 className="mt-3 text-2xl font-bold tracking-tight text-white">Page permissions</h2>
             <p className="mt-1.5 max-w-2xl text-sm text-slate-400">
-              Decide which CRM pages Manager, TL and BDM can open. Admin console stays Admin-only.
+              Decide which CRM pages Manager, TL, BDM and Ops can open. Admin console stays Admin-only.
               Changes apply to sidebar and page access immediately after save.
             </p>
           </div>
@@ -141,7 +157,7 @@ export function AdminPagePermissions() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[820px] text-left text-sm">
             <thead className="bg-slate-950/80 text-[11px] uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3 font-semibold">Page</th>
@@ -182,7 +198,7 @@ export function AdminPagePermissions() {
                     {page.description && <p className="mt-0.5 text-xs text-slate-600">{page.description}</p>}
                   </td>
                   {ROLES.map((role) => {
-                    const on = !!page.roles[role];
+                    const on = !!(page.roles && page.roles[role]);
                     return (
                       <td key={role} className="px-4 py-3.5 text-center">
                         <button
