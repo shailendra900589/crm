@@ -46,7 +46,7 @@ export type NavEntry = {
 /** Admin console — not toggleable by permissions matrix */
 export const ADMIN_NAV: NavEntry[] = [
   { pageKey: "admin", href: "/admin", icon: Shield, labels: { default: "Org Dashboard" } },
-  { pageKey: "admin.organizations", href: "/admin/organizations", icon: Building2, labels: { default: "Companies", SuperAdmin: "All Companies" } },
+  { pageKey: "admin.organizations", href: "/admin/organizations", icon: Building2, labels: { default: "Companies" } },
   { pageKey: "admin.projects", href: "/admin/projects", icon: FolderKanban, labels: { default: "Projects" } },
   { pageKey: "admin.users", href: "/admin/users", icon: UserCog, labels: { default: "Users" } },
   { pageKey: "admin.forms", href: "/admin/forms", icon: FileText, labels: { default: "Form Builder" } },
@@ -55,6 +55,12 @@ export const ADMIN_NAV: NavEntry[] = [
   { pageKey: "verification", href: "/verification", icon: ClipboardCheck, labels: { default: "Verification" } },
   { pageKey: "team", href: "/team", icon: Users, labels: { default: "Teams" } },
   { pageKey: "reports", href: "/reports", icon: BarChart3, labels: { default: "Org Reports" } },
+  { pageKey: "profile", href: "/profile", icon: UserRound, labels: { default: "Profile" } },
+];
+
+/** Platform Super Admin — companies / tenants only (never org Users) */
+export const SUPER_ADMIN_NAV: NavEntry[] = [
+  { pageKey: "admin.organizations", href: "/admin/organizations", icon: Building2, labels: { default: "Companies" } },
   { pageKey: "profile", href: "/profile", icon: UserRound, labels: { default: "Profile" } },
 ];
 
@@ -136,7 +142,10 @@ export function homeHrefForUser(role: AppRole, allowedPages?: string[] | null) {
 }
 
 export function canAccessPage(role: AppRole, pageKey: string, allowedPages?: string[] | null) {
-  if (role === "Admin" || role === "SuperAdmin") {
+  if (role === "SuperAdmin") {
+    return pageKey === "admin.organizations" || pageKey === "profile";
+  }
+  if (role === "Admin") {
     return ADMIN_NAV.some((n) => n.pageKey === pageKey) || FIELD_NAV.some((n) => n.pageKey === pageKey);
   }
   if (!allowedPages) return false;

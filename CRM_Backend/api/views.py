@@ -21,11 +21,14 @@ from .models import BulkUploadJob, CustomForm, FormSubmission, Lead, LeadDocumen
 from .permissions import (
     can_assign_visits,
     can_manage_team,
+    can_manage_user,
     can_reassign_leads,
     can_reassign_to,
     find_duplicate_leads,
     get_descendant_ids,
     is_admin,
+    is_company_admin,
+    is_superadmin,
     leads_for_user,
     project_ids_for_user,
     aggregate_money_metrics,
@@ -2124,9 +2127,12 @@ class AdminManagersView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not is_admin(request.user):
-            raise PermissionDenied("Only Admin can list managers.")
-        managers = User.objects.filter(role=User.Role.MANAGER).annotate(
+        if not is_company_admin(request.user):
+            raise PermissionDenied("Only company Admin can list managers.")
+        managers = User.objects.filter(role=User.Role.MANAGER).exclude(role=User.Role.SUPERADMIN)
+        if request.user.organization_id:
+            managers = managers.filter(organization_id=request.user.organization_id)
+        managers = managers.annotate(
             lead_count=Count("leads"),
             confirmed=Count("leads", filter=Q(leads__status=Lead.Status.ORDER_CONFIRMED)),
         )
@@ -2190,16 +2196,24 @@ class UserViewSet(viewsets.ModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
-        if is_admin(self.request.user):
-            # Admins need inactive users for edit/reactivate; list can filter with ?all=1
+        actor = self.request.user
+        # Super Admin is platform-only — never appear in Users lists
+        if is_superadmin(actor):
+            return User.objects.none()
+
+        if is_company_admin(actor):
             if self.action in ("retrieve", "update", "partial_update", "destroy") or self.request.query_params.get("all") == "1":
                 qs = User.objects.all().prefetch_related("assigned_projects")
             else:
                 qs = User.objects.filter(is_active_user=True).prefetch_related("assigned_projects")
+            qs = qs.exclude(role=User.Role.SUPERADMIN)
+            if actor.organization_id:
+                qs = qs.filter(organization_id=actor.organization_id)
         else:
-            qs = users_for_user(self.request.user).prefetch_related("assigned_projects")
+            qs = users_for_user(actor).prefetch_related("assigned_projects")
+
         role = self.request.query_params.get("role")
-        if role:
+        if role and role != User.Role.SUPERADMIN:
             qs = qs.filter(role=role)
         return qs.order_by("role", "username")
 
@@ -2211,8 +2225,8 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
 
     def perform_create(self, serializer):
-        if not is_admin(self.request.user):
-            raise PermissionDenied("Only Admin can create users.")
+        if not is_company_admin(self.request.user):
+            raise PermissionDenied("Only company Admin can create users.")
         user = serializer.save()
         from .audit import log_audit
         log_audit(
@@ -2233,6 +2247,8 @@ class UserViewSet(viewsets.ModelViewSet):
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop("partial", False)
         instance = self.get_object()
+        if instance.role == User.Role.SUPERADMIN or not can_manage_user(request.user, instance):
+            raise PermissionDenied("Cannot edit this user.")
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
@@ -2248,13 +2264,15 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(UserSerializer(instance).data)
 
     def perform_update(self, serializer):
-        if not is_admin(self.request.user):
-            raise PermissionDenied("Only Admin can edit users.")
+        if not is_company_admin(self.request.user):
+            raise PermissionDenied("Only company Admin can edit users.")
         serializer.save()
 
     def perform_destroy(self, instance):
-        if not is_admin(self.request.user):
-            raise PermissionDenied("Only Admin can deactivate users.")
+        if not is_company_admin(self.request.user):
+            raise PermissionDenied("Only company Admin can deactivate users.")
+        if instance.role == User.Role.SUPERADMIN or not can_manage_user(self.request.user, instance):
+            raise PermissionDenied("Cannot deactivate this user.")
         instance.is_active_user = False
         instance.is_active = False
         instance.save(update_fields=["is_active_user", "is_active"])

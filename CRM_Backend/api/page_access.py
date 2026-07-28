@@ -91,7 +91,7 @@ def allowed_pages_for_user(user):
     if not user or not getattr(user, "is_authenticated", False):
         return []
     if user.role == User.Role.SUPERADMIN:
-        return list(dict.fromkeys(ADMIN_PAGE_KEYS + ["dashboard", "verification", "leads"]))
+        return ["admin.organizations", "profile"]
     if user.role == User.Role.ADMIN:
         return list(ADMIN_PAGE_KEYS)
 

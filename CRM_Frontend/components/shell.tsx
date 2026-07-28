@@ -7,6 +7,7 @@ import { useTheme } from "@/app/providers";
 import { api, clearTokens, getProjectId, onProjectChange, setProjectId, type User } from "@/lib/api";
 import {
   ADMIN_NAV,
+  SUPER_ADMIN_NAV,
   canAccessPage,
   FIELD_NAV,
   homeHrefForUser,
@@ -153,7 +154,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const navItems = useMemo(() => {
     if (!user) return [];
     const role = user.role as Role;
-    const source = role === "Admin" || role === "SuperAdmin" ? ADMIN_NAV : FIELD_NAV;
+    const source = role === "SuperAdmin" ? SUPER_ADMIN_NAV : role === "Admin" ? ADMIN_NAV : FIELD_NAV;
     return source
       .filter((n) => canAccessPage(role, n.pageKey, user.allowed_pages))
       .map((n) => ({
@@ -237,7 +238,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <div className={cn("border-b border-white/10 bg-gradient-to-br px-5 py-5 text-white", themeCfg.sidebarFrom)}>
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/70">{themeCfg.eyebrow}</p>
             <p className="mt-1 text-lg font-bold tracking-tight">{themeCfg.brand}</p>
-            {role === "Admin" ? (
+            {role === "SuperAdmin" ? (
+              <p className="mt-2 text-xs text-white/70">Platform control · all companies</p>
+            ) : role === "Admin" ? (
               <p className="mt-2 text-xs text-white/70">Full organization control · all projects</p>
             ) : (
               <>

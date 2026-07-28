@@ -5,7 +5,7 @@ import { RequireRole } from "@/components/role-gate";
 
 export default function Page({ params }: { params: { id: string } }) {
   return (
-    <RequireRole roles={["Admin", "SuperAdmin"]}>
+    <RequireRole roles={["Admin"]} fallbackHref="/admin/organizations">
       <AdminProjectDetailPage projectId={Number(params.id)} />
     </RequireRole>
   );

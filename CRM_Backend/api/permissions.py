@@ -162,16 +162,37 @@ def user_can_access_project(user, project_id):
 
 
 def users_for_user(user):
-    """Users visible in hierarchy for listing/management."""
-    if is_admin(user):
-        return User.objects.filter(is_active_user=True)
+    """Users visible in hierarchy for listing/management. SuperAdmin accounts are never listed."""
+    base = User.objects.exclude(role=User.Role.SUPERADMIN)
+    if is_superadmin(user):
+        # Platform operator does not manage org staff via Users API
+        return base.none()
+    if is_company_admin(user):
+        qs = base.filter(is_active_user=True)
+        if user.organization_id:
+            qs = qs.filter(organization_id=user.organization_id)
+        return qs
     if user.role == User.Role.MANAGER:
         descendants = get_descendant_ids(user)
-        return User.objects.filter(Q(id=user.id) | Q(id__in=descendants))
+        return base.filter(Q(id=user.id) | Q(id__in=descendants))
     if user.role == User.Role.TL:
         descendants = get_descendant_ids(user)
-        return User.objects.filter(Q(id=user.id) | Q(id__in=descendants))
-    return User.objects.filter(id=user.id)
+        return base.filter(Q(id=user.id) | Q(id__in=descendants))
+    return base.filter(id=user.id)
+
+
+def can_manage_user(actor, target):
+    if not target or target.role == User.Role.SUPERADMIN:
+        return False
+    if is_superadmin(actor):
+        return False  # company staff managed by company Admin only
+    if is_company_admin(actor):
+        if actor.organization_id and target.organization_id != actor.organization_id:
+            return False
+        return True
+    if actor.role == User.Role.MANAGER:
+        return target.id in get_descendant_ids(actor) or target.reports_to_id == actor.id
+    return False
 
 
 def leads_for_user(user):
@@ -212,14 +233,6 @@ def teams_for_user(user):
 
 def can_manage_team(user):
     return user.role in (User.Role.ADMIN, User.Role.MANAGER, User.Role.TL)
-
-
-def can_manage_user(actor, target):
-    if is_admin(actor):
-        return True
-    if actor.role == User.Role.MANAGER:
-        return target.id in get_descendant_ids(actor) or target.reports_to_id == actor.id
-    return False
 
 
 def can_assign_visits(user):

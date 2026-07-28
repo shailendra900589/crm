@@ -28,7 +28,13 @@ export function RequireRole({
   useEffect(() => {
     if (!me) return;
     if (!roles.includes(me.role as Role)) {
-      router.replace(me.role === "Admin" ? "/admin" : homeHrefForUser(me.role as Role, me.allowed_pages) || fallbackHref);
+      const dest =
+        me.role === "SuperAdmin"
+          ? "/admin/organizations"
+          : me.role === "Admin"
+            ? "/admin"
+            : homeHrefForUser(me.role as Role, me.allowed_pages) || fallbackHref;
+      router.replace(dest);
     }
   }, [me, roles, router, fallbackHref]);
 

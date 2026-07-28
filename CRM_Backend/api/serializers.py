@@ -98,20 +98,18 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
     def validate_role(self, value):
         actor = self.context["request"].user
-        if actor.role not in (User.Role.ADMIN, User.Role.SUPERADMIN) and value in (
-            User.Role.ADMIN,
-            User.Role.SUPERADMIN,
-        ):
+        if value == User.Role.SUPERADMIN:
+            raise serializers.ValidationError("Super Admin cannot be created from Users.")
+        if actor.role != User.Role.ADMIN and value == User.Role.ADMIN:
             raise serializers.ValidationError("Cannot create Admin users.")
-        if value == User.Role.SUPERADMIN and actor.role != User.Role.SUPERADMIN:
-            raise serializers.ValidationError("Only Super Admin can create Super Admin.")
         return value
 
     def create(self, validated_data):
         projects = validated_data.pop("assigned_projects", [])
         password = validated_data.pop("password")
         actor = self.context["request"].user
-        if "organization" not in validated_data and getattr(actor, "organization_id", None):
+        validated_data.pop("organization", None)  # force org from actor
+        if getattr(actor, "organization_id", None):
             validated_data["organization"] = actor.organization
         user = User(**validated_data)
         user.set_password(password)
@@ -135,9 +133,20 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             "crm_pro_mobile_enabled", "organization", "can_edit_leads", "hrms_user_id",
         ]
 
+    def validate_role(self, value):
+        if value == User.Role.SUPERADMIN:
+            raise serializers.ValidationError("Cannot assign Super Admin role.")
+        actor = self.context["request"].user
+        if actor.role != User.Role.ADMIN and value == User.Role.ADMIN:
+            raise serializers.ValidationError("Cannot assign Admin role.")
+        return value
+
     def update(self, instance, validated_data):
+        if instance.role == User.Role.SUPERADMIN:
+            raise serializers.ValidationError("Super Admin accounts cannot be edited here.")
         password = validated_data.pop("password", None)
         projects = validated_data.pop("assigned_projects", None)
+        validated_data.pop("organization", None)  # keep org locked to company
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:

@@ -37,14 +37,20 @@ export function AdminUsersPage() {
   });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects });
 
+  // Super Admin must never appear in company Users UI
+  const orgUsers = useMemo(
+    () => users.filter((u) => u.role !== "SuperAdmin"),
+    [users],
+  );
+
   const managers = useMemo(
-    () => users.filter((u) => ["Admin", "Manager", "TL"].includes(u.role) && u.is_active_user !== false),
-    [users]
+    () => orgUsers.filter((u) => ["Admin", "Manager", "TL"].includes(u.role) && u.is_active_user !== false),
+    [orgUsers]
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return users.filter((u) => {
+    return orgUsers.filter((u) => {
       if (roleFilter && u.role !== roleFilter) return false;
       if (!q) return true;
       return (
@@ -55,14 +61,14 @@ export function AdminUsersPage() {
         (u.mobile_number || "").includes(q)
       );
     });
-  }, [users, search, roleFilter]);
+  }, [orgUsers, search, roleFilter]);
 
   const stats = useMemo(() => ({
-    total: users.length,
-    active: users.filter((u) => u.is_active_user !== false).length,
-    managers: users.filter((u) => u.role === "Manager").length,
-    bdms: users.filter((u) => u.role === "BDM").length,
-  }), [users]);
+    total: orgUsers.length,
+    active: orgUsers.filter((u) => u.is_active_user !== false).length,
+    managers: orgUsers.filter((u) => u.role === "Manager").length,
+    bdms: orgUsers.filter((u) => u.role === "BDM").length,
+  }), [orgUsers]);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["users"] });
@@ -135,9 +141,9 @@ export function AdminUsersPage() {
               <UserCog className="h-5 w-5 text-indigo-600 dark:text-indigo-300" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold tracking-tight text-slate-900">User Management</h2>
-              <p className="mt-1 max-w-xl text-sm text-slate-500">
-                Create employees, set roles, reporting line and project access.
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Company users</h2>
+              <p className="mt-1 max-w-xl text-sm text-slate-500 dark:text-slate-400">
+                Manage Admin, Manager, TL, BDM and Ops for your organization. Platform Super Admin is never listed here.
               </p>
             </div>
           </div>
