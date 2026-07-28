@@ -104,38 +104,40 @@ export function AdminPanel() {
   const scopeLabel = stats?.filter_summary?.project_name || (filters.project ? "Filtered" : "All projects");
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-[1200px] space-y-4">
       {/* Command header */}
-      <section className="rounded-2xl border border-slate-700/80 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_55%,#0f172a_100%)] p-5 sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-md border border-sky-400/30 bg-sky-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-sky-300">
-              <Shield className="h-3.5 w-3.5" />
+      <section className="rounded-xl border border-slate-700/80 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_55%,#0f172a_100%)] p-4 sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-md border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-300">
+              <Shield className="h-3 w-3" />
               Admin console
             </div>
-            <h2 className="mt-3 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            <h2 className="mt-2 text-xl font-bold tracking-tight text-white sm:text-2xl">
               Organization command center
             </h2>
-            <p className="mt-1.5 max-w-2xl text-sm text-slate-400">
-              Cross-project control for users, forms, managers and org KPIs — separate from field workdesks.
+            <p className="mt-1 max-w-xl text-xs text-slate-400 sm:text-sm">
+              Cross-project control for users, forms, managers and org KPIs.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             <QuickLink href="/admin/projects" icon={FolderKanban} label="Projects" primary />
             <QuickLink href="/admin/users" icon={UserCog} label="Users" />
             <QuickLink href="/admin/permissions" icon={Shield} label="Permissions" />
             <QuickLink href="/admin/forms" icon={FileText} label="Forms" />
             <QuickLink href="/admin/audit" icon={ClipboardList} label="Audit" />
             <QuickLink href="/team" icon={Users} label="Teams" />
+            <QuickLink href="/verification" icon={CheckCircle2} label="Verify" />
+            <QuickLink href="/visits" icon={CalendarClock} label="Visits" />
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
-          <KpiTile label="Projects" value={stats?.active_projects ?? "—"} loading={statsLoading} />
-          <KpiTile label="Managers" value={managers?.length ?? "—"} loading={!managers} />
-          <KpiTile label="BDMs" value={stats?.total_bdm ?? "—"} loading={statsLoading} />
-          <KpiTile label="Leads" value={stats?.total_leads ?? "—"} loading={statsLoading} />
-          <KpiTile label="Confirmed" value={stats?.orders_confirmed ?? "—"} loading={statsLoading} accent="text-emerald-300" />
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+          <KpiTile href="/admin/projects" label="Projects" value={stats?.active_projects ?? "—"} loading={statsLoading} />
+          <KpiTile href="/admin/users" label="Managers" value={managers?.length ?? "—"} loading={!managers} />
+          <KpiTile href="/admin/users" label="BDMs" value={stats?.total_bdm ?? "—"} loading={statsLoading} />
+          <KpiTile href="/leads" label="Leads" value={stats?.total_leads ?? "—"} loading={statsLoading} />
+          <KpiTile href="/leads?status=order_confirmed" label="Confirmed" value={stats?.orders_confirmed ?? "—"} loading={statsLoading} accent="text-emerald-300" />
           <KpiTile label="Conversion" value={stats ? `${stats.conversion_rate}%` : "—"} loading={statsLoading} accent="text-sky-300" />
           {stats?.money_metrics?.has_money ? (
             <>
@@ -154,8 +156,8 @@ export function AdminPanel() {
             </>
           ) : (
             <>
-              <KpiTile label="Follow-ups" value={stats?.follow_ups_due_today ?? "—"} loading={statsLoading} accent="text-amber-300" />
-              <KpiTile label="Overdue" value={stats?.overdue_follow_ups ?? "—"} loading={statsLoading} accent="text-rose-300" />
+              <KpiTile href="/follow-ups" label="Follow-ups" value={stats?.follow_ups_due_today ?? "—"} loading={statsLoading} accent="text-amber-300" />
+              <KpiTile href="/leads?overdue=1" label="Overdue" value={stats?.overdue_follow_ups ?? "—"} loading={statsLoading} accent="text-rose-300" />
             </>
           )}
         </div>
@@ -182,16 +184,16 @@ export function AdminPanel() {
         </section>
       ) : (
         <>
-          <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 sm:p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <section className="rounded-xl border border-slate-700 bg-slate-900/80 p-3.5 sm:p-4">
+            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-bold text-slate-100">Org scope</h3>
-                <p className="text-xs text-slate-500">Default: all projects — narrow when needed</p>
+                <p className="text-[11px] text-slate-500">Default: all projects — narrow when needed</p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 <Button
                   variant="outline"
-                  className="h-9 gap-1.5 border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800"
+                  className="h-8 gap-1 border-slate-600 bg-slate-950 px-2.5 text-xs text-slate-200 hover:bg-slate-800"
                   disabled={exporting || isFetching}
                   onClick={async () => {
                     setExporting(true);
@@ -206,7 +208,7 @@ export function AdminPanel() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-9 gap-1.5 border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800"
+                  className="h-8 gap-1 border-slate-600 bg-slate-950 px-2.5 text-xs text-slate-200 hover:bg-slate-800"
                   disabled={exporting}
                   onClick={async () => {
                     setExporting(true);
@@ -221,7 +223,7 @@ export function AdminPanel() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-9 gap-1.5 border-slate-600 bg-slate-950 text-slate-200 hover:bg-slate-800"
+                  className="h-8 gap-1 border-slate-600 bg-slate-950 px-2.5 text-xs text-slate-200 hover:bg-slate-800"
                   disabled={digesting}
                   onClick={async () => {
                     setDigesting(true);
@@ -270,33 +272,33 @@ export function AdminPanel() {
             </div>
           )}
 
-          <div className="grid gap-5 xl:grid-cols-3">
-            <div className="space-y-5 xl:col-span-2">
+          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="min-w-0 space-y-4">
               {/* Managers */}
               <Panel title="Managers" subtitle="Drill into team performance" action={<Link href="/admin/users" className="text-xs font-semibold text-sky-300 hover:underline">Manage users</Link>}>
                 {(managers || []).length ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     {managers!.map((m) => (
                       <button
                         key={m.id}
                         type="button"
                         onClick={() => setDrillManager(m.id)}
-                        className="rounded-xl border border-slate-700 bg-slate-950/60 p-4 text-left transition hover:border-sky-500/40 hover:bg-slate-950"
+                        className="group rounded-lg border border-slate-700 bg-slate-950/60 p-3 text-left transition hover:border-sky-500/50 hover:bg-slate-950 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300">
-                            <UserCog className="h-5 w-5" />
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300 transition group-hover:bg-sky-500/25">
+                            <UserCog className="h-4 w-4" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate font-bold text-slate-100">{m.name}</p>
-                            <p className="text-xs text-slate-500">{m.role}</p>
+                            <p className="truncate text-sm font-bold text-slate-100">{m.name}</p>
+                            <p className="text-[11px] text-slate-500">{m.role}</p>
                           </div>
-                          <ArrowRight className="h-4 w-4 text-slate-500" />
+                          <ArrowRight className="h-4 w-4 text-slate-600 transition group-hover:translate-x-0.5 group-hover:text-sky-300" />
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-3 text-xs">
-                          <span className="text-slate-400">{m.lead_count} leads</span>
-                          <span className="font-semibold text-emerald-400">{m.confirmed} confirmed</span>
-                          <span className="text-amber-400">{m.follow_ups_today} follow-ups</span>
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px]">
+                          <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-slate-300">{m.lead_count} leads</span>
+                          <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 font-semibold text-emerald-400">{m.confirmed} conf.</span>
+                          <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-amber-400">{m.follow_ups_today} FUs</span>
                         </div>
                       </button>
                     ))}
@@ -306,24 +308,24 @@ export function AdminPanel() {
                 )}
               </Panel>
 
-              {/* KPI grid — never crash */}
+              {/* KPI grid */}
               <Panel title={`${scopeLabel} metrics`} subtitle="Live KPIs for the selected org scope">
                 {statsLoading && !stats ? (
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
                     {Array.from({ length: 8 }).map((_, i) => (
-                      <Skeleton key={i} className="h-24 rounded-xl bg-slate-800" />
+                      <Skeleton key={i} className="h-16 rounded-lg bg-slate-800" />
                     ))}
                   </div>
                 ) : (
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <MetricBox icon={Building2} label="Projects" value={stats?.total_projects ?? 0} />
-                    <MetricBox icon={Factory} label="Companies" value={stats?.total_companies ?? 0} />
-                    <MetricBox icon={FolderKanban} label="Products" value={stats?.total_products ?? 0} />
-                    <MetricBox icon={Users} label="Total leads" value={stats?.total_leads ?? 0} />
-                    <MetricBox icon={CheckCircle2} label="Confirmed" value={stats?.orders_confirmed ?? 0} tone="emerald" />
+                  <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
+                    <MetricBox href="/admin/projects" icon={Building2} label="Projects" value={stats?.total_projects ?? 0} />
+                    <MetricBox href="/leads" icon={Factory} label="Companies" value={stats?.total_companies ?? 0} />
+                    <MetricBox href="/admin/projects" icon={FolderKanban} label="Products" value={stats?.total_products ?? 0} />
+                    <MetricBox href="/leads" icon={Users} label="Total leads" value={stats?.total_leads ?? 0} />
+                    <MetricBox href="/leads?status=order_confirmed" icon={CheckCircle2} label="Confirmed" value={stats?.orders_confirmed ?? 0} tone="emerald" />
                     <MetricBox icon={TrendingUp} label="Conversion" value={`${stats?.conversion_rate ?? 0}%`} tone="sky" />
-                    <MetricBox icon={CalendarClock} label="Follow-ups today" value={stats?.follow_ups_due_today ?? 0} tone="amber" />
-                    <MetricBox icon={ClipboardList} label="Overdue" value={stats?.overdue_follow_ups ?? 0} tone="rose" />
+                    <MetricBox href="/follow-ups" icon={CalendarClock} label="Follow-ups today" value={stats?.follow_ups_due_today ?? 0} tone="amber" />
+                    <MetricBox href="/leads?overdue=1" icon={ClipboardList} label="Overdue" value={stats?.overdue_follow_ups ?? 0} tone="rose" />
                     {(stats?.money_metrics?.metrics || []).map((m) => (
                       <MetricBox
                         key={m.role}
@@ -337,24 +339,25 @@ export function AdminPanel() {
                 )}
               </Panel>
 
-              <div className={cn("grid gap-5", projectChart.length && disposition.length ? "lg:grid-cols-2" : "lg:grid-cols-1")}>
+              <div className={cn("grid gap-4", projectChart.length && disposition.length ? "md:grid-cols-2" : "")}>
                 {!!projectChart.length && (
-                  <Panel title="Leads by project" subtitle="Total vs confirmed">
-                    <ResponsiveContainer width="100%" height={240}>
-                      <BarChart data={projectChart} barSize={22}>
+                  <Panel title="Leads by project" subtitle="Total vs confirmed" action={<Link href="/admin/projects" className="text-xs font-semibold text-sky-300 hover:underline">Open</Link>}>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={projectChart} barSize={18}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={28} />
                         <Tooltip
                           contentStyle={{
-                            borderRadius: 12,
+                            borderRadius: 10,
                             border: "1px solid #334155",
                             background: "#0f172a",
                             color: "#e2e8f0",
+                            fontSize: 12,
                           }}
                         />
-                        <Bar dataKey="leads" fill="#64748b" name="Total" radius={[6, 6, 0, 0]} />
-                        <Bar dataKey="confirmed" name="Confirmed" radius={[6, 6, 0, 0]}>
+                        <Bar dataKey="leads" fill="#64748b" name="Total" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="confirmed" name="Confirmed" radius={[4, 4, 0, 0]}>
                           {projectChart.map((p, i) => (
                             <Cell key={i} fill={p.fill} />
                           ))}
@@ -365,20 +368,21 @@ export function AdminPanel() {
                 )}
 
                 {!!disposition.length && (
-                  <Panel title="Disposition" subtitle="Lead status mix">
-                    <ResponsiveContainer width="100%" height={240}>
+                  <Panel title="Disposition" subtitle="Lead status mix" action={<Link href="/pipeline" className="text-xs font-semibold text-sky-300 hover:underline">Pipeline</Link>}>
+                    <ResponsiveContainer width="100%" height={200}>
                       <PieChart>
-                        <Pie data={disposition} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={52} outerRadius={82} paddingAngle={3}>
+                        <Pie data={disposition} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={44} outerRadius={70} paddingAngle={3}>
                           {disposition.map((_, i) => (
                             <Cell key={i} fill={COLORS[i % COLORS.length]} />
                           ))}
                         </Pie>
                         <Tooltip
                           contentStyle={{
-                            borderRadius: 12,
+                            borderRadius: 10,
                             border: "1px solid #334155",
                             background: "#0f172a",
                             color: "#e2e8f0",
+                            fontSize: 12,
                           }}
                         />
                       </PieChart>
@@ -387,12 +391,13 @@ export function AdminPanel() {
                 )}
               </div>
 
-              <div className={cn("grid gap-5", companyStats.length && productStats.length ? "lg:grid-cols-2" : "lg:grid-cols-1")}>
+              <div className={cn("grid gap-4", companyStats.length && productStats.length ? "md:grid-cols-2" : "")}>
                 {!!companyStats.length && (
                   <DataTable
                     title="Companies"
+                    href="/leads"
                     headers={["Company", "City", "Leads", "Conf.", "Conv."]}
-                    rows={companyStats.map((c) => [
+                    rows={companyStats.slice(0, 8).map((c) => [
                       <span key="n" className="font-medium text-slate-100">{c.name}</span>,
                       <span key="c" className="text-slate-400">{c.city || "—"}</span>,
                       c.lead_count,
@@ -404,8 +409,9 @@ export function AdminPanel() {
                 {!!productStats.length && (
                   <DataTable
                     title="Products"
+                    href="/admin/projects"
                     headers={["Product", "Project", "Leads", "Conf."]}
-                    rows={productStats.slice(0, 12).map((p) => [
+                    rows={productStats.slice(0, 8).map((p) => [
                       <span key="n" className="font-medium text-slate-100">{p.name}</span>,
                       <span key="p" className="text-slate-400">{p.project_name || "—"}</span>,
                       p.lead_count,
@@ -415,16 +421,17 @@ export function AdminPanel() {
                 )}
               </div>
 
-              <div className={cn("grid gap-5", projectStats.length && teamStats.length ? "lg:grid-cols-2" : "lg:grid-cols-1")}>
+              <div className={cn("grid gap-4", projectStats.length && teamStats.length ? "md:grid-cols-2" : "")}>
                 {!!projectStats.length && (
                   <DataTable
                     title="Project performance"
+                    href="/admin/projects"
                     headers={["Project", "Leads", "Conf.", "Conv.", "Status"]}
                     rows={projectStats.map((p) => [
-                      <span key="n" className="flex items-center gap-2 font-medium text-slate-100">
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+                      <Link key="n" href={`/admin/projects/${p.id}`} className="flex items-center gap-2 font-medium text-slate-100 hover:text-sky-300">
+                        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: p.color }} />
                         {p.name}
-                      </span>,
+                      </Link>,
                       p.lead_count,
                       <span key="ok" className="text-emerald-400">{p.confirmed_count}</span>,
                       `${p.conversion}%`,
@@ -435,6 +442,7 @@ export function AdminPanel() {
                 {!!teamStats.length && (
                   <DataTable
                     title="BDM leaderboard"
+                    href="/admin/users"
                     headers={["BDM", "Leads", "Confirmed"]}
                     rows={teamStats.map((u) => [
                       <span key="n" className="font-medium text-slate-100">{u.name}</span>,
@@ -446,36 +454,68 @@ export function AdminPanel() {
               </div>
             </div>
 
-            <aside className="space-y-4 xl:self-start">
-              <SideCard title="Visits today" icon={CalendarClock} badge={stats?.visits_scheduled_today ?? 0}>
-                <p className="text-4xl font-bold text-sky-300">{stats?.visits_scheduled_today ?? 0}</p>
-                <p className="mt-1 text-xs text-slate-500">Across all BDMs & projects</p>
-              </SideCard>
+            {/* Fixed-width activity rail — never stretches full screen */}
+            <aside className="space-y-3 lg:sticky lg:top-24">
+              <Link
+                href="/visits"
+                className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-900 p-3 transition hover:border-sky-500/40 hover:bg-slate-900/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300">
+                  <CalendarClock className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Visits today</p>
+                  <p className="text-2xl font-bold tabular-nums text-sky-300">{stats?.visits_scheduled_today ?? 0}</p>
+                </div>
+                <ArrowRight className="h-4 w-4 shrink-0 text-slate-600" />
+              </Link>
 
               {(stats?.upcoming_team_visits || []).length > 0 && (
-                <SideCard title="Upcoming visits" icon={ClipboardList} badge={stats?.upcoming_team_visits?.length ?? 0}>
-                  <div className="max-h-64 space-y-2 overflow-y-auto">
-                    {stats!.upcoming_team_visits.map((v) => <VisitRow key={v.id} visit={v} />)}
+                <SideCard
+                  title="Upcoming visits"
+                  icon={ClipboardList}
+                  badge={stats?.upcoming_team_visits?.length ?? 0}
+                  actionHref="/visits"
+                  actionLabel="All"
+                >
+                  <div className="max-h-52 space-y-1 overflow-y-auto">
+                    {stats!.upcoming_team_visits.map((v) => (
+                      <VisitRow key={v.id} visit={v} />
+                    ))}
                   </div>
                 </SideCard>
               )}
 
-              {(stats?.recent_submissions || []).length > 0 ? (
-                <SideCard title="Recent submissions" icon={History} badge={stats?.recent_submissions?.length}>
-                  <div className="max-h-72 space-y-2 overflow-y-auto">
+              {(stats?.recent_submissions || []).length > 0 && (
+                <SideCard
+                  title="Recent submissions"
+                  icon={History}
+                  badge={stats?.recent_submissions?.length}
+                  actionHref="/leads"
+                  actionLabel="Leads"
+                >
+                  <div className="max-h-56 space-y-1 overflow-y-auto">
                     {stats!.recent_submissions.map((s) => (
-                      <div key={s.id} className="rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2.5">
-                        <p className="truncate text-sm font-semibold text-slate-100">{s.lead_name}</p>
-                        <p className="text-xs text-slate-500">
-                          {s.submitted_by_name}
-                          {s.project_name ? ` · ${s.project_name}` : ""}
-                        </p>
-                        <p className="mt-0.5 text-[10px] text-slate-600">{new Date(s.submitted_at).toLocaleString()}</p>
-                      </div>
+                      <Link
+                        key={s.id}
+                        href={`/leads?lead=${s.lead}`}
+                        className="group flex items-start gap-2 rounded-lg border border-slate-700/80 bg-slate-950/50 px-2.5 py-2 transition hover:border-sky-500/40 hover:bg-slate-950"
+                      >
+                        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[13px] font-semibold text-slate-100 group-hover:text-sky-200">{s.lead_name}</p>
+                          <p className="truncate text-[11px] text-slate-500">
+                            {s.submitted_by_name}
+                            {s.project_name ? ` · ${s.project_name}` : ""}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-slate-600">{new Date(s.submitted_at).toLocaleString()}</p>
+                        </div>
+                        <ArrowRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-700 opacity-0 transition group-hover:opacity-100 group-hover:text-sky-300" />
+                      </Link>
                     ))}
                   </div>
                 </SideCard>
-              ) : null}
+              )}
             </aside>
           </div>
         </>
@@ -499,13 +539,13 @@ function QuickLink({
     <Link
       href={href}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition",
+        "inline-flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition",
         primary
           ? "bg-sky-500 text-slate-950 hover:bg-sky-400"
-          : "border border-slate-600 bg-slate-950/40 text-slate-200 hover:border-slate-500 hover:bg-slate-900",
+          : "border border-slate-600 bg-slate-950/40 text-slate-200 hover:border-sky-500/40 hover:bg-slate-900",
       )}
     >
-      <Icon className="h-3.5 w-3.5" />
+      <Icon className="h-3 w-3" />
       {label}
     </Link>
   );
@@ -516,22 +556,33 @@ function KpiTile({
   value,
   loading,
   accent,
+  href,
 }: {
   label: string;
   value: string | number;
   loading?: boolean;
   accent?: string;
+  href?: string;
 }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+  const inner = (
+    <>
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
       {loading ? (
-        <div className="mt-2 h-7 w-12 animate-pulse rounded bg-white/10" />
+        <div className="mt-1.5 h-6 w-10 animate-pulse rounded bg-white/10" />
       ) : (
-        <p className={cn("mt-1 text-xl font-bold text-white", accent)}>{value}</p>
+        <p className={cn("mt-0.5 text-lg font-bold tabular-nums text-white", accent)}>{value}</p>
       )}
-    </div>
+    </>
   );
+  const cls = "rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 transition hover:border-sky-400/30 hover:bg-white/10";
+  if (href) {
+    return (
+      <Link href={href} className={cn(cls, "block")}>
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={cls}>{inner}</div>;
 }
 
 function MetricBox({
@@ -539,11 +590,13 @@ function MetricBox({
   label,
   value,
   tone = "slate",
+  href,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string | number;
   tone?: "slate" | "emerald" | "sky" | "amber" | "rose";
+  href?: string;
 }) {
   const tones = {
     slate: "text-slate-300 bg-slate-800",
@@ -552,17 +605,27 @@ function MetricBox({
     amber: "text-amber-300 bg-amber-500/15",
     rose: "text-rose-300 bg-rose-500/15",
   };
-  return (
-    <div className="rounded-xl border border-slate-700 bg-slate-950/70 p-3.5">
-      <div className="flex items-center gap-2">
-        <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", tones[tone])}>
-          <Icon className="h-4 w-4" />
+  const inner = (
+    <>
+      <div className="flex items-center gap-1.5">
+        <span className={cn("flex h-6 w-6 items-center justify-center rounded-md", tones[tone])}>
+          <Icon className="h-3.5 w-3.5" />
         </span>
-        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       </div>
-      <p className="mt-2 text-2xl font-bold text-slate-50">{value}</p>
-    </div>
+      <p className="mt-1.5 text-xl font-bold tabular-nums text-slate-50">{value}</p>
+    </>
   );
+  const cls =
+    "rounded-lg border border-slate-700 bg-slate-950/70 p-2.5 transition hover:border-sky-500/40 hover:bg-slate-950";
+  if (href) {
+    return (
+      <Link href={href} className={cn(cls, "block")}>
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={cls}>{inner}</div>;
 }
 
 function Panel({
@@ -577,11 +640,11 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-slate-700 bg-slate-900 p-4 sm:p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div>
+    <section className="rounded-xl border border-slate-700 bg-slate-900 p-3.5 sm:p-4">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="min-w-0">
           <h3 className="text-sm font-bold text-slate-100">{title}</h3>
-          {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+          {subtitle && <p className="mt-0.5 text-[11px] text-slate-500">{subtitle}</p>}
         </div>
         {action}
       </div>
@@ -595,45 +658,60 @@ function SideCard({
   icon: Icon,
   badge,
   children,
+  actionHref,
+  actionLabel,
 }: {
   title: string;
   icon: React.ComponentType<{ className?: string }>;
   badge?: number;
   children: React.ReactNode;
+  actionHref?: string;
+  actionLabel?: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900">
-      <div className="flex items-center gap-2 border-b border-slate-700 px-4 py-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/15 text-sky-300">
-          <Icon className="h-4 w-4" />
+    <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-900">
+      <div className="flex items-center gap-2 border-b border-slate-700 px-3 py-2">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-sky-500/15 text-sky-300">
+          <Icon className="h-3.5 w-3.5" />
         </div>
-        <h3 className="flex-1 text-sm font-bold text-slate-100">{title}</h3>
+        <h3 className="flex-1 truncate text-xs font-bold text-slate-100">{title}</h3>
         {badge !== undefined && (
-          <span className="rounded-full bg-sky-500 px-2 py-0.5 text-[11px] font-bold text-slate-950">{badge}</span>
+          <span className="rounded-full bg-sky-500 px-1.5 py-0.5 text-[10px] font-bold text-slate-950">{badge}</span>
+        )}
+        {actionHref && (
+          <Link href={actionHref} className="text-[10px] font-semibold text-sky-300 hover:underline">
+            {actionLabel || "View"}
+          </Link>
         )}
       </div>
-      <div className="p-4">{children}</div>
+      <div className="p-2.5">{children}</div>
     </div>
   );
 }
 
 function VisitRow({ visit }: { visit: LeadVisit }) {
   return (
-    <div className="rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2.5">
-      <p className="text-sm font-semibold text-slate-100">{visit.lead_name}</p>
-      <p className="text-xs text-slate-500">
+    <Link
+      href={`/leads?lead=${visit.lead}`}
+      className="group block rounded-lg border border-slate-700/80 bg-slate-950/50 px-2.5 py-2 transition hover:border-sky-500/40 hover:bg-slate-950"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="truncate text-[13px] font-semibold text-slate-100 group-hover:text-sky-200">{visit.lead_name}</p>
+        <ArrowRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-700 opacity-0 transition group-hover:opacity-100 group-hover:text-sky-300" />
+      </div>
+      <p className="truncate text-[11px] text-slate-500">
         {visit.scheduled_date} · {visit.assigned_to_name}
       </p>
-      <p className="text-[10px] text-slate-600">
+      <p className="truncate text-[10px] text-slate-600">
         {visit.merchant_city} · {visit.visit_type.replace("_", " ")}
       </p>
-    </div>
+    </Link>
   );
 }
 
 function EmptyBlock({ text, compact }: { text: string; compact?: boolean }) {
   return (
-    <div className={cn("rounded-xl border border-dashed border-slate-700 text-center text-sm text-slate-500", compact ? "px-3 py-3" : "px-4 py-5")}>
+    <div className={cn("rounded-lg border border-dashed border-slate-700 text-center text-xs text-slate-500", compact ? "px-2 py-2" : "px-3 py-4")}>
       {text}
     </div>
   );
@@ -643,22 +721,29 @@ function DataTable({
   title,
   headers,
   rows,
+  href,
 }: {
   title: string;
   headers: string[];
   rows: React.ReactNode[][];
+  href?: string;
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-900">
-      <div className="border-b border-slate-700 px-4 py-3">
+    <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-900">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-700 px-3 py-2.5">
         <h3 className="text-sm font-bold text-slate-100">{title}</h3>
+        {href && (
+          <Link href={href} className="text-[11px] font-semibold text-sky-300 hover:underline">
+            View all
+          </Link>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
-          <thead className="bg-slate-950/80 text-[11px] uppercase tracking-wide text-slate-500">
+          <thead className="bg-slate-950/80 text-[10px] uppercase tracking-wide text-slate-500">
             <tr>
               {headers.map((h) => (
-                <th key={h} className="px-4 py-2.5 font-semibold">
+                <th key={h} className="px-3 py-2 font-semibold">
                   {h}
                 </th>
               ))}
@@ -667,9 +752,9 @@ function DataTable({
           <tbody>
             {rows.length ? (
               rows.map((row, i) => (
-                <tr key={i} className="border-t border-slate-800">
+                <tr key={i} className="border-t border-slate-800 transition hover:bg-slate-800/40">
                   {row.map((cell, j) => (
-                    <td key={j} className="px-4 py-2.5 text-slate-300">
+                    <td key={j} className="px-3 py-2 text-slate-300">
                       {cell}
                     </td>
                   ))}
@@ -677,7 +762,7 @@ function DataTable({
               ))
             ) : (
               <tr>
-                <td colSpan={headers.length} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={headers.length} className="px-3 py-4 text-center text-slate-500">
                   No data
                 </td>
               </tr>

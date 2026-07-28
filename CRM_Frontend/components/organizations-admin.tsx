@@ -65,17 +65,17 @@ export function OrganizationsAdminView() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-5 text-white">
+    <div className="mx-auto max-w-[1100px] space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-950 p-4 text-white sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-indigo-300">Super Admin</p>
-            <h1 className="mt-1 text-2xl font-bold">Companies</h1>
-            <p className="mt-1 text-sm text-slate-300">
-              Approve registration · set trial / payment · publish · sync HRMS employees in one place.
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-indigo-300">Super Admin</p>
+            <h1 className="mt-1 text-xl font-bold sm:text-2xl">Companies</h1>
+            <p className="mt-1 max-w-xl text-xs text-slate-300 sm:text-sm">
+              Approve registration · set trial / payment · publish · sync HRMS employees.
             </p>
           </div>
-          <Building2 className="h-10 w-10 text-indigo-300/60" />
+          <Building2 className="h-8 w-8 text-indigo-300/60" />
         </div>
       </div>
 

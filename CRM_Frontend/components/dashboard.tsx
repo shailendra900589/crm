@@ -227,11 +227,11 @@ export function DashboardView() {
   }));
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-[1200px] space-y-4">
       {/* Role-specific hero */}
       <section
         className={cn(
-          "relative overflow-hidden rounded-2xl border p-5 text-white sm:p-6",
+          "relative overflow-hidden rounded-xl border p-4 text-white sm:p-5",
           isManager && "border-emerald-800/50 bg-gradient-to-br from-emerald-900 via-teal-950 to-slate-950",
           isTL && "border-amber-800/40 bg-gradient-to-br from-amber-800 via-orange-950 to-slate-950",
           isBdm && "border-slate-700 bg-gradient-to-br from-blue-900 via-slate-900 to-slate-950",
@@ -388,9 +388,9 @@ export function DashboardView() {
         </section>
       )}
 
-      <div className="grid items-start gap-5 xl:grid-cols-3">
+      <div className="mx-auto grid max-w-none items-start gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
         {/* Main workdesk */}
-        <div className="space-y-5 xl:col-span-2">
+        <div className="min-w-0 space-y-4">
           <SectionHeading
             title={isManager ? "Optional visit form" : isTL ? "Visit / onboarding form" : "Onboarding Form"}
             subtitle={
@@ -589,8 +589,8 @@ export function DashboardView() {
           )}
         </div>
 
-        {/* Right sidebar */}
-        <aside className="space-y-4 xl:sticky xl:top-20">
+        {/* Right sidebar — fixed width rail */}
+        <aside className="space-y-3 lg:sticky lg:top-24">
           <Panel title="Next Visit" icon={CalendarClock} featured>
             {data.next_visit ? (
               <button
@@ -598,21 +598,16 @@ export function DashboardView() {
                 onClick={() => setActiveVisit(data.next_visit)}
                 className="group w-full text-left"
               >
-                <div className="rounded-xl border border-slate-200 p-3.5 transition group-hover:border-blue-400 dark:border-slate-700 dark:group-hover:border-blue-500/50">
-                  <p className="text-[15px] font-bold text-slate-900 dark:text-slate-50">{data.next_visit.lead_name}</p>
-                  <p className="mt-1 flex items-center gap-1.5 text-[12px] text-slate-500 dark:text-slate-400">
-                    <MapPin className="h-3.5 w-3.5" />
+                <div className="rounded-lg border border-slate-200 p-3 transition group-hover:border-blue-400 dark:border-slate-700 dark:group-hover:border-blue-500/50">
+                  <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-50">{data.next_visit.lead_name}</p>
+                  <p className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                    <MapPin className="h-3 w-3" />
                     {data.next_visit.merchant_city}
                   </p>
-                  <p className="mt-2 inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <p className="mt-1.5 inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
                     {data.next_visit.scheduled_date}
                   </p>
-                  {data.next_visit.remarks && (
-                    <p className="mt-2 line-clamp-2 text-[11px] text-slate-500 dark:text-slate-400">
-                      {data.next_visit.remarks}
-                    </p>
-                  )}
-                  <span className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-[12px] font-semibold text-white transition group-hover:bg-blue-700">
+                  <span className="mt-2.5 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-[12px] font-semibold text-white transition group-hover:bg-blue-700">
                     Open Visit Form
                     <ArrowRight className="h-3.5 w-3.5" />
                   </span>
@@ -624,7 +619,7 @@ export function DashboardView() {
           </Panel>
 
           <Panel title="Upcoming Visits" icon={ClipboardCheck} badge={data.upcoming_visits.length}>
-            <div className="max-h-64 space-y-1.5 overflow-y-auto pr-0.5">
+            <div className="max-h-52 space-y-1 overflow-y-auto pr-0.5">
               {data.upcoming_visits.length ? data.upcoming_visits.map((v) => (
                 <VisitRow key={v.id} visit={v} onSelect={() => setActiveVisit(v)} />
               )) : <EmptyMini icon={ClipboardCheck} text="No visits in queue" />}
@@ -633,29 +628,32 @@ export function DashboardView() {
 
           {data.recent_submissions.length > 0 && (
             <Panel title="Form History" icon={History} badge={data.recent_submissions.length}>
-              <div className="max-h-64 space-y-1.5 overflow-y-auto pr-0.5">
+              <div className="max-h-52 space-y-1 overflow-y-auto pr-0.5">
                 {data.recent_submissions.map((s) => (
-                  <div key={s.id} className="rounded-lg border border-slate-200 px-3 py-2.5 dark:border-slate-700">
-                    <div className="flex items-start gap-2">
-                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
-                      <div className="min-w-0">
-                        <p className="truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">{s.lead_name}</p>
-                        <p className="text-[11px] text-slate-500">{s.submitted_by_name}</p>
-                        <p className="mt-0.5 text-[10px] text-slate-400">{new Date(s.submitted_at).toLocaleString()}</p>
-                      </div>
+                  <Link
+                    key={s.id}
+                    href={`/leads?lead=${s.lead}`}
+                    className="group flex items-start gap-2 rounded-lg border border-slate-200 px-2.5 py-2 transition hover:border-blue-300 dark:border-slate-700 dark:hover:border-blue-500/40"
+                  >
+                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-semibold text-slate-900 group-hover:text-blue-700 dark:text-slate-100 dark:group-hover:text-blue-300">{s.lead_name}</p>
+                      <p className="text-[11px] text-slate-500">{s.submitted_by_name}</p>
+                      <p className="mt-0.5 text-[10px] text-slate-400">{new Date(s.submitted_at).toLocaleString()}</p>
                     </div>
-                  </div>
+                    <ArrowRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-300 opacity-0 transition group-hover:opacity-100" />
+                  </Link>
                 ))}
               </div>
             </Panel>
           )}
 
           <div className="grid grid-cols-2 gap-2">
-            <Link href="/leads" className="flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2.5 text-center text-[13px] font-semibold text-white transition hover:bg-blue-700">
+            <Link href="/leads" className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-center text-[12px] font-semibold text-white transition hover:bg-blue-700">
               <Target className="h-3.5 w-3.5" />
               All Leads
             </Link>
-            <Link href="/leads?overdue=1" className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-center text-[13px] font-semibold text-slate-700 transition hover:border-amber-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-amber-500/40">
+            <Link href="/leads?overdue=1" className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-[12px] font-semibold text-slate-700 transition hover:border-amber-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-amber-500/40">
               <Phone className="h-3.5 w-3.5 text-amber-600" />
               Overdue
             </Link>

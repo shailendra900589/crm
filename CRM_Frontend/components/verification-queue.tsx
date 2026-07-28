@@ -68,14 +68,14 @@ export function VerificationQueueView() {
   const assigneeOptions = [...(assignees?.ops || []), ...(assignees?.team || [])];
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 p-5 text-white shadow-lg dark:border-slate-700">
+    <div className="mx-auto max-w-[1100px] space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 p-4 text-white shadow-lg dark:border-slate-700 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-200/80">Workflow</p>
-            <h1 className="mt-1 text-2xl font-bold">Verification desk</h1>
-            <p className="mt-1 max-w-xl text-sm text-slate-300">
-              BDM submits docs → Manager/TL assigns office Ops → Ops completes → everyone sees status on dashboard.
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-200/80">Workflow</p>
+            <h1 className="mt-1 text-xl font-bold sm:text-2xl">Verification desk</h1>
+            <p className="mt-1 max-w-xl text-xs text-slate-300 sm:text-sm">
+              BDM submits docs → Manager/TL assigns Ops → Ops completes → status on dashboard.
             </p>
           </div>
           <ClipboardCheck className="h-10 w-10 text-blue-300/70" />

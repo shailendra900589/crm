@@ -70,10 +70,10 @@ export function AdminProjectsPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto max-w-[1100px] space-y-5">
       <Link
         href="/admin"
-        className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700"
+        className="inline-flex items-center gap-2 text-sm font-medium text-sky-600 hover:text-sky-500 dark:text-sky-300"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to Dashboard

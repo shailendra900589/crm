@@ -259,7 +259,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             )}
           </div>
 
-          <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-3">
+          <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2.5">
             {navItems.map((item) => {
               const Icon = item.icon;
               const active =
@@ -272,13 +272,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   href={item.href}
                   onClick={() => setMobileOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+                    "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition",
                     active
-                      ? cn(themeCfg.active, themeCfg.activeDark)
+                      ? cn(themeCfg.active, themeCfg.activeDark, "shadow-sm ring-1 ring-black/5 dark:ring-white/10")
                       : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800",
                   )}
                 >
-                  <Icon className="h-4 w-4" />
+                  <Icon className="h-4 w-4 shrink-0" />
                   {item.label}
                 </Link>
               );
@@ -375,7 +375,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
           </header>
-          <div className="p-4 sm:p-6 lg:p-8">{children}</div>
+          <div className={cn("mx-auto max-w-[1200px] p-4 sm:p-5 lg:p-6")}>{children}</div>
         </main>
       </div>
     </LiveSyncProvider>

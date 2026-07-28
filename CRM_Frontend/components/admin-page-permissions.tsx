@@ -113,18 +113,17 @@ export function AdminPagePermissions() {
   }
 
   return (
-    <div className="space-y-5">
-      <section className="rounded-2xl border border-slate-700/80 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_55%,#0f172a_100%)] p-5 sm:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="mx-auto max-w-[1100px] space-y-4">
+      <section className="rounded-xl border border-slate-700/80 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_55%,#0f172a_100%)] p-4 sm:p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-md border border-sky-400/30 bg-sky-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-sky-300">
-              <KeyRound className="h-3.5 w-3.5" />
+            <div className="inline-flex items-center gap-2 rounded-md border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-300">
+              <KeyRound className="h-3 w-3" />
               Access control
             </div>
-            <h2 className="mt-3 text-2xl font-bold tracking-tight text-white">Page permissions</h2>
-            <p className="mt-1.5 max-w-2xl text-sm text-slate-400">
+            <h2 className="mt-2 text-xl font-bold tracking-tight text-white sm:text-2xl">Page permissions</h2>
+            <p className="mt-1 max-w-xl text-xs text-slate-400 sm:text-sm">
               Decide which CRM pages Manager, TL, BDM and Ops can open. Admin console stays Admin-only.
-              Changes apply to sidebar and page access immediately after save.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
