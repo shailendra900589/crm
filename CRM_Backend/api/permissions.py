@@ -55,6 +55,7 @@ def verification_works_for_user(user):
         "lead",
         "lead__merchant",
         "lead__project",
+        "lead__bdm",
         "assigned_to",
         "assigned_by",
         "document",
@@ -63,13 +64,19 @@ def verification_works_for_user(user):
     if is_superadmin(user):
         return qs
     if is_company_admin(user):
+        # Include works whose org FK was left null but lead/project belongs to this company
         if user.organization_id:
-            return qs.filter(organization_id=user.organization_id)
-        return qs.filter(lead__project_id__in=project_ids_for_user(user))
+            oid = user.organization_id
+            return qs.filter(
+                Q(organization_id=oid)
+                | Q(lead__project__organization_id=oid)
+                | Q(lead__bdm__organization_id=oid)
+            ).distinct()
+        return qs
     if user.role in (User.Role.MANAGER, User.Role.TL):
         ids = get_descendant_ids(user)
         ids.add(user.id)
-        pids = project_ids_for_user(user)
+        pids = project_ids_for_user(user) or set()
         return qs.filter(
             Q(assigned_to_id__in=ids)
             | Q(assigned_by=user)

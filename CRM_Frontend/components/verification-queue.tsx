@@ -11,14 +11,19 @@ import { useMemo, useState } from "react";
 export function VerificationQueueView() {
   const qc = useQueryClient();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me });
-  const { data: summary } = useQuery({ queryKey: ["verification-summary"], queryFn: api.verificationSummary });
+  const { data: summary, refetch: refetchSummary } = useQuery({
+    queryKey: ["verification-summary"],
+    queryFn: api.verificationSummary,
+    refetchInterval: 15_000,
+  });
   const [filter, setFilter] = useState<"open" | "mine" | "all">("open");
-  const { data: works, isLoading } = useQuery({
+  const { data: works, isLoading, refetch: refetchWorks } = useQuery({
     queryKey: ["verification-works", filter],
     queryFn: () =>
       api.verificationWorks(
         filter === "mine" ? { mine: true } : filter === "open" ? { open: true } : undefined,
       ),
+    refetchInterval: 15_000,
   });
   const { data: assignees } = useQuery({
     queryKey: ["verification-assignees"],
@@ -122,7 +127,19 @@ export function VerificationQueueView() {
         {isLoading ? (
           <div className="h-40 animate-pulse bg-slate-100 dark:bg-slate-800" />
         ) : list.length === 0 ? (
-          <p className="px-5 py-12 text-center text-sm text-slate-400">No verification tasks in this view.</p>
+          <div className="px-5 py-8 text-center">
+            <p className="text-sm text-slate-400">No verification tasks in this view.</p>
+            <button
+              type="button"
+              className="mt-3 text-xs font-semibold text-sky-400 hover:underline"
+              onClick={() => {
+                void refetchSummary();
+                void refetchWorks();
+              }}
+            >
+              Refresh queue
+            </button>
+          </div>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {list.map((w) => (

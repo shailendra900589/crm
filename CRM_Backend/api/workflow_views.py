@@ -324,6 +324,10 @@ class VerificationWorkViewSet(viewsets.ModelViewSet):
     pagination_class = None
 
     def get_queryset(self):
+        try:
+            maybe_backfill_verification_works()
+        except Exception:
+            pass
         qs = verification_works_for_user(self.request.user)
         status_f = self.request.query_params.get("status")
         if status_f:
@@ -502,6 +506,10 @@ class VerificationWorkViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"])
     def summary(self, request):
+        try:
+            maybe_backfill_verification_works()
+        except Exception:
+            pass
         qs = verification_works_for_user(request.user)
         counts = qs.aggregate(
             open=Count("id", filter=Q(status__in=["open", "reopened"])),
@@ -528,9 +536,12 @@ class VerificationWorkViewSet(viewsets.ModelViewSet):
         return Response({"ops": ops, "team": others})
 
 
-def ensure_verification_work_for_submission(lead, submission, actor=None):
-    """Create open verification work when form has files / docs pending."""
-    org = getattr(lead.project, "organization", None)
+def ensure_verification_work_for_submission(lead, submission=None, actor=None):
+    """Create/update open verification work for a lead after BDM form submit or file upload."""
+    project = lead.project
+    org = getattr(project, "organization", None)
+    if org is None:
+        org = getattr(lead.bdm, "organization", None)
     doc, _ = LeadDocument.objects.get_or_create(lead=lead)
     existing = (
         VerificationWork.objects.filter(lead=lead, status__in=["open", "assigned", "in_progress", "reopened"])
@@ -538,9 +549,19 @@ def ensure_verification_work_for_submission(lead, submission, actor=None):
         .first()
     )
     if existing:
-        existing.form_submission = submission
-        existing.document = doc
-        existing.save(update_fields=["form_submission", "document", "updated_at"])
+        updates = []
+        if submission and existing.form_submission_id != getattr(submission, "id", None):
+            existing.form_submission = submission
+            updates.append("form_submission")
+        if existing.document_id != doc.id:
+            existing.document = doc
+            updates.append("document")
+        if org and existing.organization_id != org.id:
+            existing.organization = org
+            updates.append("organization")
+        if updates:
+            updates.append("updated_at")
+            existing.save(update_fields=updates)
         return existing
     return VerificationWork.objects.create(
         organization=org,
@@ -551,3 +572,44 @@ def ensure_verification_work_for_submission(lead, submission, actor=None):
         status=VerificationWork.Status.OPEN,
         assigned_by=actor,
     )
+
+
+_last_backfill_at = 0.0
+
+
+def maybe_backfill_verification_works(limit=300, min_interval_sec=20):
+    """Throttle expensive backfill so list/summary stay fast."""
+    import time
+
+    global _last_backfill_at
+    now = time.time()
+    if now - _last_backfill_at < min_interval_sec:
+        return 0
+    _last_backfill_at = now
+    return backfill_verification_works(limit=limit)
+
+
+def backfill_verification_works(limit=500):
+    """Create missing VerificationWork rows for leads that already have form submissions."""
+    from .models import FormSubmission, Lead
+
+    created = 0
+    sub_lead_ids = list(
+        FormSubmission.objects.order_by("-submitted_at").values_list("lead_id", flat=True).distinct()[:limit]
+    )
+    for lead in Lead.objects.filter(id__in=sub_lead_ids).select_related(
+        "project", "project__organization", "bdm", "merchant"
+    ):
+        org = getattr(lead.project, "organization", None) or getattr(lead.bdm, "organization", None)
+        if org:
+            VerificationWork.objects.filter(lead=lead, organization_id__isnull=True).update(organization=org)
+
+        has_active = VerificationWork.objects.filter(
+            lead=lead, status__in=["open", "assigned", "in_progress", "reopened"]
+        ).exists()
+        if has_active:
+            continue
+        sub = FormSubmission.objects.filter(lead=lead).order_by("-submitted_at").first()
+        ensure_verification_work_for_submission(lead, sub, actor=getattr(sub, "submitted_by", None))
+        created += 1
+    return created

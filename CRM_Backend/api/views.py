@@ -1774,6 +1774,14 @@ class LeadViewSet(viewsets.ModelViewSet):
         doc.verified_by = None
         doc.save()
 
+        # Ensure verification queue shows this upload even before full form submit
+        try:
+            from .workflow_views import ensure_verification_work_for_submission
+
+            ensure_verification_work_for_submission(lead, actor=request.user)
+        except Exception:
+            pass
+
         return Response({"url": url, "name": safe_name, "path": path, "field_id": field_id})
 
     @action(detail=True, methods=["patch"])
@@ -1949,37 +1957,38 @@ class LeadViewSet(viewsets.ModelViewSet):
             },
         )
 
-        # Any uploaded file answers → docs need verification assignment
+        # Every form submission enters the verification queue (docs + form review)
+        from .workflow_views import ensure_verification_work_for_submission
+
+        doc, _ = LeadDocument.objects.get_or_create(lead=lead)
         has_files = any(
             f.get("type") == "file" and answers.get(f.get("field_id"))
             for f in (form.schema or [])
         )
-        if has_files:
-            doc, _ = LeadDocument.objects.get_or_create(lead=lead)
+        if has_files or doc.gst_file or doc.pan_file or doc.cheque_file:
             doc.verification_status = LeadDocument.VerificationStatus.PENDING
             doc.verified_by = None
             doc.save(update_fields=["verification_status", "verified_by"])
-            from .workflow_views import ensure_verification_work_for_submission
 
-            work = ensure_verification_work_for_submission(lead, sub, actor=request.user)
-            # Notify BDM's reporting chain + project admins to assign Ops
-            notify_ids = set(
-                User.objects.filter(role=User.Role.ADMIN, is_active_user=True).values_list("id", flat=True)[:10]
+        work = ensure_verification_work_for_submission(lead, sub, actor=request.user)
+        # Notify BDM's reporting chain + project admins to assign Ops
+        notify_ids = set(
+            User.objects.filter(role=User.Role.ADMIN, is_active_user=True).values_list("id", flat=True)[:10]
+        )
+        parent = getattr(lead.bdm, "reports_to", None)
+        hops = 0
+        while parent is not None and hops < 5:
+            notify_ids.add(parent.id)
+            parent = getattr(parent, "reports_to", None)
+            hops += 1
+        for uid in notify_ids:
+            if uid == request.user.id:
+                continue
+            Notification.objects.create(
+                user_id=uid,
+                message=f"Form ready for verification: {lead.merchant.name} — assign office Ops",
+                link=f"/verification?work={work.id}",
             )
-            parent = getattr(lead.bdm, "reports_to", None)
-            hops = 0
-            while parent is not None and hops < 5:
-                notify_ids.add(parent.id)
-                parent = getattr(parent, "reports_to", None)
-                hops += 1
-            for uid in notify_ids:
-                if uid == request.user.id:
-                    continue
-                Notification.objects.create(
-                    user_id=uid,
-                    message=f"Documents ready for verification: {lead.merchant.name} — assign office Ops",
-                    link=f"/verification?work={work.id}",
-                )
 
         visit_id = request.data.get("visit_id")
         visit = None
