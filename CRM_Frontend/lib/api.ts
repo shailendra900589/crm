@@ -159,8 +159,25 @@ async function requestList<T>(path: string): Promise<T[]> {
 }
 
 export const api = {
-  login: (username: string, password: string) =>
-    request<Tokens>("/api/auth/login/", { method: "POST", body: JSON.stringify({ username, password }) }),
+  login: async (username: string, password: string) => {
+    const res = await fetch(`${API}/api/auth/login/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: username.trim(), password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const detail = err.detail;
+      const msg =
+        typeof detail === "string"
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d: { message?: string } | string) => (typeof d === "string" ? d : d.message || "")).filter(Boolean).join(", ")
+            : "Invalid username or password";
+      throw new Error(msg || "Invalid username or password");
+    }
+    return res.json() as Promise<Tokens>;
+  },
 
   /** Exchange Trackbook HRMS SSO ticket for CRM JWT (iframe / mobile embed). */
   loginWithTrackbookSso: async (ticket: string) => {

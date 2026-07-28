@@ -3,6 +3,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 User = get_user_model()
@@ -20,60 +21,70 @@ def ensure_platform_superadmin() -> User:
     """
     user = User.objects.filter(username__iexact=PLATFORM_SUPERADMIN_USERNAME).first()
     if not user:
-        user = User(username=PLATFORM_SUPERADMIN_USERNAME)
-
-    changed = user.pk is None
-    user.username = PLATFORM_SUPERADMIN_USERNAME
-    if user.role != User.Role.SUPERADMIN:
-        user.role = User.Role.SUPERADMIN
-        changed = True
-    if user.organization_id is not None:
+        user = User.objects.create_user(
+            username=PLATFORM_SUPERADMIN_USERNAME,
+            email=PLATFORM_SUPERADMIN_EMAIL,
+            password=PLATFORM_SUPERADMIN_PASSWORD,
+            first_name="Rahul",
+            role=User.Role.SUPERADMIN,
+            is_staff=True,
+            is_superuser=True,
+            is_active=True,
+            is_active_user=True,
+        )
         user.organization = None
-        changed = True
-    if not user.is_active:
-        user.is_active = True
-        changed = True
-    if not user.is_active_user:
-        user.is_active_user = True
-        changed = True
-    if not user.is_staff:
-        user.is_staff = True
-        changed = True
-    if not user.is_superuser:
-        user.is_superuser = True
-        changed = True
-    if not user.first_name:
-        user.first_name = "Rahul"
-        changed = True
-    if user.email != PLATFORM_SUPERADMIN_EMAIL:
-        user.email = PLATFORM_SUPERADMIN_EMAIL
-        changed = True
+        user.save(update_fields=["organization"])
+    else:
+        update_fields = []
+        user.username = PLATFORM_SUPERADMIN_USERNAME
+        if user.role != User.Role.SUPERADMIN:
+            user.role = User.Role.SUPERADMIN
+            update_fields.append("role")
+        if user.organization_id is not None:
+            user.organization = None
+            update_fields.append("organization")
+        if not user.is_active:
+            user.is_active = True
+            update_fields.append("is_active")
+        if not user.is_active_user:
+            user.is_active_user = True
+            update_fields.append("is_active_user")
+        if not user.is_staff:
+            user.is_staff = True
+            update_fields.append("is_staff")
+        if not user.is_superuser:
+            user.is_superuser = True
+            update_fields.append("is_superuser")
+        if user.first_name != "Rahul":
+            user.first_name = "Rahul"
+            update_fields.append("first_name")
+        if user.email != PLATFORM_SUPERADMIN_EMAIL:
+            user.email = PLATFORM_SUPERADMIN_EMAIL
+            update_fields.append("email")
+        if not user.check_password(PLATFORM_SUPERADMIN_PASSWORD):
+            user.set_password(PLATFORM_SUPERADMIN_PASSWORD)
+            update_fields.append("password")
+        if update_fields:
+            user.save(update_fields=list(dict.fromkeys(update_fields)))
 
-    # Keep password in sync with the published Super Admin credential
-    if user.pk is None or not user.check_password(PLATFORM_SUPERADMIN_PASSWORD):
-        user.set_password(PLATFORM_SUPERADMIN_PASSWORD)
-        changed = True
-
-    if changed:
-        user.save()
-
-    # Retire legacy seed account so only Rahul is the platform login
     User.objects.filter(username__iexact="superadmin").exclude(pk=user.pk).update(
         is_active=False,
         is_active_user=False,
     )
-    return user
+    # Fresh instance for password checks
+    return User.objects.get(pk=user.pk)
 
 
 class CRMTokenObtainPairSerializer(TokenObtainPairSerializer):
-    """Case-insensitive username + Super Admin auto-provision + active-user gate."""
+    """
+    Direct password check + token issue (does not rely on Django authenticate()).
+    Always repairs platform Super Admin before validating Rahul credentials.
+    """
 
     def validate(self, attrs):
-        # Ensure platform Super Admin exists before auth (fixes missing seed on EC2)
         try:
             ensure_platform_superadmin()
         except Exception:
-            # Never block normal logins if ensure fails (e.g. mid-migrate)
             pass
 
         raw_username = (attrs.get(self.username_field) or "").strip()
@@ -84,15 +95,14 @@ class CRMTokenObtainPairSerializer(TokenObtainPairSerializer):
                 code="no_active_account",
             )
 
-        # Resolve case-insensitive username to the canonical DB value
-        match = User.objects.filter(username__iexact=raw_username).first()
-        if match:
-            attrs[self.username_field] = match.username
+        user = User.objects.filter(username__iexact=raw_username).first()
+        if user is None or not user.check_password(password):
+            raise AuthenticationFailed(
+                "No active account found with the given credentials",
+                code="no_active_account",
+            )
 
-        data = super().validate(attrs)
-        user = self.user
-
-        if not getattr(user, "is_active_user", True):
+        if not user.is_active or not getattr(user, "is_active_user", True):
             raise AuthenticationFailed(
                 "This account is deactivated. Contact your Admin.",
                 code="user_inactive",
@@ -105,9 +115,14 @@ class CRMTokenObtainPairSerializer(TokenObtainPairSerializer):
                 code="org_pending",
             )
 
-        data["role"] = user.role
-        data["username"] = user.username
-        return data
+        refresh = RefreshToken.for_user(user)
+        self.user = user
+        return {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "role": user.role,
+            "username": user.username,
+        }
 
 
 class CRMTokenObtainPairView(TokenObtainPairView):
