@@ -5,7 +5,7 @@ import { RequireRole } from "@/components/role-gate";
 
 export default function OrganizationsPage() {
   return (
-    <RequireRole roles={["Admin", "SuperAdmin"]}>
+    <RequireRole roles={["SuperAdmin"]} fallbackHref="/admin">
       <OrganizationsAdminView />
     </RequireRole>
   );

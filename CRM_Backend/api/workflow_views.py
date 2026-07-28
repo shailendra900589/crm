@@ -120,9 +120,16 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        # Platform company list / manage is Super Admin only.
+        # Company Admin may still retrieve/sync their own org (HRMS).
         if is_superadmin(user):
             return Organization.objects.all()
-        if user.organization_id:
+        if is_company_admin(user) and user.organization_id and self.action in (
+            "retrieve",
+            "sync_hrms_employees",
+            "partial_update",
+            "update",
+        ):
             return Organization.objects.filter(id=user.organization_id)
         return Organization.objects.none()
 

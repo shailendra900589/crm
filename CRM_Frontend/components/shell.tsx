@@ -195,6 +195,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     visits: "Visits",
     team: role === "TL" ? "Squad" : "Teams",
     admin: "Org Dashboard",
+    organizations: "Platform",
     forms: "Form Builder",
     permissions: "Permissions",
     projects: isProjectDetail ? "Project Details" : "Projects",

@@ -63,7 +63,6 @@ ADMIN_PAGE_KEYS = [
     "admin.forms",
     "admin.audit",
     "admin.permissions",
-    "admin.organizations",
     "verification",
     "team",
     "reports",

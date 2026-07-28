@@ -201,8 +201,8 @@ export function OrganizationsAdminView() {
     },
   });
 
-  if (!isSuper && me?.role !== "Admin") {
-    return <p className="text-sm text-slate-500">Only Super Admin / Admin can manage companies.</p>;
+  if (!isSuper) {
+    return <p className="text-sm text-slate-500">Only Super Admin can manage platform companies.</p>;
   }
 
   const s: PlatformSummary | undefined = summary;

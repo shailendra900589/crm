@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   BellRing,
-  Building2,
   CalendarClock,
   CalendarDays,
   ClipboardCheck,
@@ -46,7 +45,6 @@ export type NavEntry = {
 /** Admin console — not toggleable by permissions matrix */
 export const ADMIN_NAV: NavEntry[] = [
   { pageKey: "admin", href: "/admin", icon: Shield, labels: { default: "Org Dashboard" } },
-  { pageKey: "admin.organizations", href: "/admin/organizations", icon: Building2, labels: { default: "Companies" } },
   { pageKey: "admin.projects", href: "/admin/projects", icon: FolderKanban, labels: { default: "Projects" } },
   { pageKey: "admin.users", href: "/admin/users", icon: UserCog, labels: { default: "Users" } },
   { pageKey: "admin.forms", href: "/admin/forms", icon: FileText, labels: { default: "Form Builder" } },
