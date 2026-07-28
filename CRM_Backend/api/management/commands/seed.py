@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils.text import slugify
 
-from api.models import CustomForm, Lead, LeadVisit, Merchant, Organization, Product, Project, Team
+from api.models import CustomForm, FormSubmission, Lead, LeadVisit, Merchant, Organization, Product, Project, Team
 
 User = get_user_model()
 
@@ -21,6 +21,23 @@ DEFAULT_FORM = [
         "currency": "INR",
         "metric_role": "pending_amount",
         "min": 0,
+    },
+    {
+        "field_id": "amount_collected",
+        "label": "Amount Collected",
+        "type": "currency",
+        "required": False,
+        "currency": "INR",
+        "metric_role": "collection",
+        "min": 0,
+    },
+    {
+        "field_id": "gst_certificate",
+        "label": "GST Certificate",
+        "type": "file",
+        "required": False,
+        "file_accept": "pdf_image",
+        "max_file_mb": 10,
     },
 ]
 
@@ -140,7 +157,12 @@ class Command(BaseCommand):
                 )
             form, created = CustomForm.objects.get_or_create(
                 project=project,
-                defaults={"title": f"{name} Onboarding Form", "schema": DEFAULT_FORM, "created_by": admin},
+                defaults={
+                    "title": f"{name} Onboarding Form",
+                    "schema": DEFAULT_FORM,
+                    "created_by": admin,
+                    "enable_collection": True,
+                },
             )
             if not created:
                 # Keep title; refresh schema so new money KPI fields are available
@@ -150,7 +172,8 @@ class Command(BaseCommand):
                     if field["field_id"] not in existing_ids:
                         merged.append(field)
                 form.schema = merged or DEFAULT_FORM
-                form.save(update_fields=["schema"])
+                form.enable_collection = True
+                form.save(update_fields=["schema", "enable_collection"])
             team, _ = Team.objects.get_or_create(
                 project=project, manager=manager,
                 defaults={"name": f"{name} Sales Team"},
@@ -185,16 +208,35 @@ class Command(BaseCommand):
                     },
                 )
                 product = products[i % len(products)] if products else None
-                Lead.objects.get_or_create(
+                custom_data = {
+                    "gst_number": f"GST{i}000",
+                    "business_type": "Retail",
+                    "pending_amount": (i + 1) * 2500,
+                    "amount_collected": i * 1000,
+                }
+                lead, lead_created = Lead.objects.get_or_create(
                     project=project, merchant=merchant, bdm=bdm,
                     defaults={
                         "product": product,
                         "status": statuses[i % len(statuses)][0],
                         "follow_up_date": date.today() + timedelta(days=i - 2),
                         "notes": f"Demo lead for {name} under {project.name}",
-                        "custom_data": {"gst_number": f"GST{i}000", "business_type": "Retail"},
+                        "custom_data": custom_data,
                     },
                 )
+                if not lead_created and not (lead.custom_data or {}):
+                    lead.custom_data = custom_data
+                    lead.save(update_fields=["custom_data"])
+                form = getattr(project, "custom_form", None)
+                if form and (lead.custom_data or {}):
+                    FormSubmission.objects.update_or_create(
+                        lead=lead,
+                        custom_form=form,
+                        defaults={
+                            "submitted_by": bdm,
+                            "answers": lead.custom_data,
+                        },
+                    )
 
         for project in projects:
             leads = Lead.objects.filter(project=project, bdm=bdm)[:3]

@@ -157,7 +157,12 @@ class FormSubmission(models.Model):
     lead = models.ForeignKey("Lead", on_delete=models.CASCADE, related_name="form_submissions")
     submitted_by = models.ForeignKey(User, on_delete=models.CASCADE)
     answers = models.JSONField(default=dict)
-    submitted_at = models.DateTimeField(auto_now_add=True)
+    submitted_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["lead", "custom_form"], name="uniq_formsubmission_lead_form"),
+        ]
 
 
 class BulkUploadJob(models.Model):

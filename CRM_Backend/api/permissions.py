@@ -477,7 +477,22 @@ def discover_money_fields(project_ids=None):
             fid = field.get("field_id")
             role = field.get("metric_role")
             ftype = field.get("type", "text")
-            if not fid or not role or ftype not in ("currency", "number"):
+            if not fid or ftype not in ("currency", "number"):
+                continue
+            # Infer KPI role from label when form builder left metric_role blank
+            if not role:
+                label_l = (field.get("label") or "").lower()
+                fid_l = str(fid).lower()
+                hay = f"{label_l} {fid_l}"
+                if any(x in hay for x in ("collected", "amount collected", "payment received", "collection amount")):
+                    role = "collection"
+                elif any(x in hay for x in ("pending", "outstanding", "due amount", "collection pending")):
+                    role = "pending_amount"
+                elif any(x in hay for x in ("deal value", "order value", "gmv", "deal_value")):
+                    role = "deal_value"
+                else:
+                    continue
+            if role not in ("collection", "pending_amount", "deal_value"):
                 continue
             mapping[fid] = {
                 "role": role,

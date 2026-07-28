@@ -866,9 +866,20 @@ class AdminExportView(APIView):
         stamp = date.today().isoformat()
         project = request.query_params.get("project") or "all"
         fmt = (request.query_params.get("format") or "xlsx").lower()
+        leads_qs = admin_filter_leads(
+            request,
+            Lead.objects.select_related("project", "bdm", "merchant", "product").prefetch_related(
+                "form_submissions", "form_submissions__custom_form"
+            ),
+        )
+        leads = list(leads_qs[:5000])
         if fmt == "pdf":
-            return export_admin_report_pdf(response.data, filename=f"crm_report_{project}_{stamp}.pdf")
-        return export_admin_report_xlsx(response.data, filename=f"crm_report_{project}_{stamp}.xlsx")
+            return export_admin_report_pdf(
+                response.data, leads=leads, filename=f"crm_report_{project}_{stamp}.pdf"
+            )
+        return export_admin_report_xlsx(
+            response.data, leads=leads, filename=f"crm_report_{project}_{stamp}.xlsx"
+        )
 
 
 class AdminDigestView(APIView):
@@ -1730,12 +1741,38 @@ class LeadViewSet(viewsets.ModelViewSet):
         if not url.startswith("http"):
             url = request.build_absolute_uri(url)
 
+        # Persist immediately so Docs tab / dashboards see the file even before form submit
+        custom = dict(lead.custom_data or {})
+        custom[field_id] = url
+        lead.custom_data = custom
+        lead.save(update_fields=["custom_data"])
+
         # Mark documents pack as pending verification for Manager/TL/Admin
         doc, _ = LeadDocument.objects.get_or_create(lead=lead)
-        if doc.verification_status != LeadDocument.VerificationStatus.PENDING or doc.verified_by_id:
-            doc.verification_status = LeadDocument.VerificationStatus.PENDING
-            doc.verified_by = None
-            doc.save(update_fields=["verification_status", "verified_by"])
+        label_l = (field_def.get("label") or "").lower()
+        fid_l = field_id.lower()
+        hay = f"{label_l} {fid_l}"
+        mapped = False
+        try:
+            from django.core.files.base import ContentFile
+
+            with default_storage.open(path, "rb") as fh:
+                content = ContentFile(fh.read(), name=safe_name)
+            if "gst" in hay:
+                doc.gst_file.save(safe_name, content, save=False)
+                mapped = True
+            elif "pan" in hay:
+                doc.pan_file.save(safe_name, content, save=False)
+                mapped = True
+            elif any(x in hay for x in ("cheque", "check", "cancel")):
+                doc.cheque_file.save(safe_name, content, save=False)
+                mapped = True
+        except Exception:
+            mapped = False
+
+        doc.verification_status = LeadDocument.VerificationStatus.PENDING
+        doc.verified_by = None
+        doc.save()
 
         return Response({"url": url, "name": safe_name, "path": path, "field_id": field_id})
 
@@ -1889,11 +1926,27 @@ class LeadViewSet(viewsets.ModelViewSet):
                 if f.get("metric_role") == "collection" and f.get("field_id"):
                     answers.pop(f["field_id"], None)
 
+        # Keep previously uploaded file URLs if client omitted them on re-submit
+        merged = dict(lead.custom_data or {})
+        merged.update(answers or {})
+        for f in form.schema or []:
+            if f.get("type") == "file" and f.get("field_id"):
+                fid = f["field_id"]
+                if not merged.get(fid) and (lead.custom_data or {}).get(fid):
+                    merged[fid] = lead.custom_data[fid]
+        answers = merged
+
         lead.custom_data = answers
         lead.save(update_fields=["custom_data"])
+        now = timezone.now()
         sub, _ = FormSubmission.objects.update_or_create(
-            lead=lead, custom_form=form,
-            defaults={"submitted_by": request.user, "answers": answers},
+            lead=lead,
+            custom_form=form,
+            defaults={
+                "submitted_by": request.user,
+                "answers": answers,
+                "submitted_at": now,
+            },
         )
 
         # Any uploaded file answers → docs need verification assignment

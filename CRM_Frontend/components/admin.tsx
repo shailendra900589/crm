@@ -60,6 +60,7 @@ export function AdminPanel() {
   const { data: stats, isLoading: statsLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ["admin-dashboard", filters],
     queryFn: () => api.adminDashboard(filters),
+    refetchInterval: 20_000,
   });
   const { data: managers } = useQuery({ queryKey: ["admin-managers"], queryFn: api.adminManagers });
   const { data: drillData } = useQuery({
@@ -182,7 +183,11 @@ export function AdminPanel() {
       ) : (
         <>
           <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4 sm:p-5">
-            <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">Org scope</h3>
+                <p className="text-xs text-slate-500">Default: all projects — narrow when needed</p>
+              </div>
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
@@ -332,9 +337,9 @@ export function AdminPanel() {
                 )}
               </Panel>
 
-              <div className="grid gap-5 lg:grid-cols-2">
-                <Panel title="Leads by project" subtitle="Total vs confirmed">
-                  {projectChart.length ? (
+              <div className={cn("grid gap-5", projectChart.length && disposition.length ? "lg:grid-cols-2" : "lg:grid-cols-1")}>
+                {!!projectChart.length && (
+                  <Panel title="Leads by project" subtitle="Total vs confirmed">
                     <ResponsiveContainer width="100%" height={240}>
                       <BarChart data={projectChart} barSize={22}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
@@ -356,13 +361,11 @@ export function AdminPanel() {
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <EmptyBlock text="No project lead data" />
-                  )}
-                </Panel>
+                  </Panel>
+                )}
 
-                <Panel title="Disposition" subtitle="Lead status mix">
-                  {disposition.length ? (
+                {!!disposition.length && (
+                  <Panel title="Disposition" subtitle="Lead status mix">
                     <ResponsiveContainer width="100%" height={240}>
                       <PieChart>
                         <Pie data={disposition} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={52} outerRadius={82} paddingAngle={3}>
@@ -380,94 +383,99 @@ export function AdminPanel() {
                         />
                       </PieChart>
                     </ResponsiveContainer>
-                  ) : (
-                    <EmptyBlock text="No disposition data" />
-                  )}
-                </Panel>
+                  </Panel>
+                )}
               </div>
 
-              <div className="grid gap-5 lg:grid-cols-2">
-                <DataTable
-                  title="Companies"
-                  headers={["Company", "City", "Leads", "Conf.", "Conv."]}
-                  rows={companyStats.map((c) => [
-                    <span key="n" className="font-medium text-slate-100">{c.name}</span>,
-                    <span key="c" className="text-slate-400">{c.city || "—"}</span>,
-                    c.lead_count,
-                    <span key="ok" className="text-emerald-400">{c.confirmed_count}</span>,
-                    `${c.conversion}%`,
-                  ])}
-                />
-                <DataTable
-                  title="Products"
-                  headers={["Product", "Project", "Leads", "Conf."]}
-                  rows={productStats.slice(0, 12).map((p) => [
-                    <span key="n" className="font-medium text-slate-100">{p.name}</span>,
-                    <span key="p" className="text-slate-400">{p.project_name || "—"}</span>,
-                    p.lead_count,
-                    <span key="ok" className="text-emerald-400">{p.confirmed_count}</span>,
-                  ])}
-                />
+              <div className={cn("grid gap-5", companyStats.length && productStats.length ? "lg:grid-cols-2" : "lg:grid-cols-1")}>
+                {!!companyStats.length && (
+                  <DataTable
+                    title="Companies"
+                    headers={["Company", "City", "Leads", "Conf.", "Conv."]}
+                    rows={companyStats.map((c) => [
+                      <span key="n" className="font-medium text-slate-100">{c.name}</span>,
+                      <span key="c" className="text-slate-400">{c.city || "—"}</span>,
+                      c.lead_count,
+                      <span key="ok" className="text-emerald-400">{c.confirmed_count}</span>,
+                      `${c.conversion}%`,
+                    ])}
+                  />
+                )}
+                {!!productStats.length && (
+                  <DataTable
+                    title="Products"
+                    headers={["Product", "Project", "Leads", "Conf."]}
+                    rows={productStats.slice(0, 12).map((p) => [
+                      <span key="n" className="font-medium text-slate-100">{p.name}</span>,
+                      <span key="p" className="text-slate-400">{p.project_name || "—"}</span>,
+                      p.lead_count,
+                      <span key="ok" className="text-emerald-400">{p.confirmed_count}</span>,
+                    ])}
+                  />
+                )}
               </div>
 
-              <div className="grid gap-5 lg:grid-cols-2">
-                <DataTable
-                  title="Project performance"
-                  headers={["Project", "Leads", "Conf.", "Conv.", "Status"]}
-                  rows={projectStats.map((p) => [
-                    <span key="n" className="flex items-center gap-2 font-medium text-slate-100">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color }} />
-                      {p.name}
-                    </span>,
-                    p.lead_count,
-                    <span key="ok" className="text-emerald-400">{p.confirmed_count}</span>,
-                    `${p.conversion}%`,
-                    <Badge key="s" status={p.is_active ? "approved" : "rejected"} label={p.is_active ? "Active" : "Off"} />,
-                  ])}
-                />
-                <DataTable
-                  title="BDM leaderboard"
-                  headers={["BDM", "Leads", "Confirmed"]}
-                  rows={teamStats.map((u) => [
-                    <span key="n" className="font-medium text-slate-100">{u.name}</span>,
-                    u.lead_count,
-                    <span key="ok" className="text-emerald-400">{u.confirmed}</span>,
-                  ])}
-                />
+              <div className={cn("grid gap-5", projectStats.length && teamStats.length ? "lg:grid-cols-2" : "lg:grid-cols-1")}>
+                {!!projectStats.length && (
+                  <DataTable
+                    title="Project performance"
+                    headers={["Project", "Leads", "Conf.", "Conv.", "Status"]}
+                    rows={projectStats.map((p) => [
+                      <span key="n" className="flex items-center gap-2 font-medium text-slate-100">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: p.color }} />
+                        {p.name}
+                      </span>,
+                      p.lead_count,
+                      <span key="ok" className="text-emerald-400">{p.confirmed_count}</span>,
+                      `${p.conversion}%`,
+                      <Badge key="s" status={p.is_active ? "approved" : "rejected"} label={p.is_active ? "Active" : "Off"} />,
+                    ])}
+                  />
+                )}
+                {!!teamStats.length && (
+                  <DataTable
+                    title="BDM leaderboard"
+                    headers={["BDM", "Leads", "Confirmed"]}
+                    rows={teamStats.map((u) => [
+                      <span key="n" className="font-medium text-slate-100">{u.name}</span>,
+                      u.lead_count,
+                      <span key="ok" className="text-emerald-400">{u.confirmed}</span>,
+                    ])}
+                  />
+                )}
               </div>
             </div>
 
-            <aside className="space-y-4">
+            <aside className="space-y-4 xl:self-start">
               <SideCard title="Visits today" icon={CalendarClock} badge={stats?.visits_scheduled_today ?? 0}>
                 <p className="text-4xl font-bold text-sky-300">{stats?.visits_scheduled_today ?? 0}</p>
                 <p className="mt-1 text-xs text-slate-500">Across all BDMs & projects</p>
               </SideCard>
 
-              <SideCard title="Upcoming visits" icon={ClipboardList} badge={stats?.upcoming_team_visits?.length ?? 0}>
-                <div className="max-h-64 space-y-2 overflow-y-auto">
-                  {(stats?.upcoming_team_visits || []).length ? (
-                    stats!.upcoming_team_visits.map((v) => <VisitRow key={v.id} visit={v} />)
-                  ) : (
-                    <EmptyBlock text="No upcoming visits" compact />
-                  )}
-                </div>
-              </SideCard>
+              {(stats?.upcoming_team_visits || []).length > 0 && (
+                <SideCard title="Upcoming visits" icon={ClipboardList} badge={stats?.upcoming_team_visits?.length ?? 0}>
+                  <div className="max-h-64 space-y-2 overflow-y-auto">
+                    {stats!.upcoming_team_visits.map((v) => <VisitRow key={v.id} visit={v} />)}
+                  </div>
+                </SideCard>
+              )}
 
-              <SideCard title="Recent submissions" icon={History}>
-                <div className="max-h-72 space-y-2 overflow-y-auto">
-                  {(stats?.recent_submissions || []).length ? (
-                    stats!.recent_submissions.map((s) => (
+              {(stats?.recent_submissions || []).length > 0 ? (
+                <SideCard title="Recent submissions" icon={History} badge={stats?.recent_submissions?.length}>
+                  <div className="max-h-72 space-y-2 overflow-y-auto">
+                    {stats!.recent_submissions.map((s) => (
                       <div key={s.id} className="rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2.5">
                         <p className="truncate text-sm font-semibold text-slate-100">{s.lead_name}</p>
-                        <p className="text-xs text-slate-500">{s.submitted_by_name}</p>
+                        <p className="text-xs text-slate-500">
+                          {s.submitted_by_name}
+                          {s.project_name ? ` · ${s.project_name}` : ""}
+                        </p>
                         <p className="mt-0.5 text-[10px] text-slate-600">{new Date(s.submitted_at).toLocaleString()}</p>
                       </div>
-                    ))
-                  ) : (
-                    <EmptyBlock text="No submissions yet" compact />
-                  )}
-                </div>
-              </SideCard>
+                    ))}
+                  </div>
+                </SideCard>
+              ) : null}
             </aside>
           </div>
         </>
@@ -625,7 +633,7 @@ function VisitRow({ visit }: { visit: LeadVisit }) {
 
 function EmptyBlock({ text, compact }: { text: string; compact?: boolean }) {
   return (
-    <div className={cn("rounded-xl border border-dashed border-slate-700 text-center text-sm text-slate-500", compact ? "px-3 py-6" : "px-4 py-10")}>
+    <div className={cn("rounded-xl border border-dashed border-slate-700 text-center text-sm text-slate-500", compact ? "px-3 py-3" : "px-4 py-5")}>
       {text}
     </div>
   );

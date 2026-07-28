@@ -168,6 +168,9 @@ export function DashboardView() {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["visits"] });
+      qc.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["verification"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
       setRemarks("");
     },
   });
@@ -182,6 +185,9 @@ export function DashboardView() {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["visits"] });
+      qc.invalidateQueries({ queryKey: ["admin-dashboard"] });
+      qc.invalidateQueries({ queryKey: ["verification"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
       setActiveVisit(null);
       setVisitModalRemarks("");
     },
@@ -307,7 +313,7 @@ export function DashboardView() {
                 : "Your assigned project metrics"
           }
         />
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3">
           <MetricCard label="Total Leads" value={data.total_leads} icon={Target} variant="slate" pulse={pulse} hint="In your scope" />
           <MetricCard label="Companies" value={data.total_companies ?? 0} icon={Factory} variant="blue" accent="text-blue-700" pulse={pulse} />
           <MetricCard label="Products" value={data.total_products ?? 0} icon={FileText} variant="violet" accent="text-violet-700" pulse={pulse} />
@@ -625,22 +631,24 @@ export function DashboardView() {
             </div>
           </Panel>
 
-          <Panel title="Form History" icon={History}>
-            <div className="max-h-64 space-y-1.5 overflow-y-auto pr-0.5">
-              {data.recent_submissions.length ? data.recent_submissions.map((s) => (
-                <div key={s.id} className="rounded-lg border border-slate-200 px-3 py-2.5 dark:border-slate-700">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
-                    <div className="min-w-0">
-                      <p className="truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">{s.lead_name}</p>
-                      <p className="text-[11px] text-slate-500">{s.submitted_by_name}</p>
-                      <p className="mt-0.5 text-[10px] text-slate-400">{new Date(s.submitted_at).toLocaleString()}</p>
+          {data.recent_submissions.length > 0 && (
+            <Panel title="Form History" icon={History} badge={data.recent_submissions.length}>
+              <div className="max-h-64 space-y-1.5 overflow-y-auto pr-0.5">
+                {data.recent_submissions.map((s) => (
+                  <div key={s.id} className="rounded-lg border border-slate-200 px-3 py-2.5 dark:border-slate-700">
+                    <div className="flex items-start gap-2">
+                      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-semibold text-slate-900 dark:text-slate-100">{s.lead_name}</p>
+                        <p className="text-[11px] text-slate-500">{s.submitted_by_name}</p>
+                        <p className="mt-0.5 text-[10px] text-slate-400">{new Date(s.submitted_at).toLocaleString()}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )) : <EmptyMini icon={History} text="No submissions yet" />}
-            </div>
-          </Panel>
+                ))}
+              </div>
+            </Panel>
+          )}
 
           <div className="grid grid-cols-2 gap-2">
             <Link href="/leads" className="flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2.5 text-center text-[13px] font-semibold text-white transition hover:bg-blue-700">

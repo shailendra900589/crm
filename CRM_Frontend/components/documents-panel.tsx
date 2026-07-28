@@ -77,8 +77,10 @@ export function DocumentsPanel({
   };
 
   const isImage = (url: string) => /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(url);
-  const hasAnyDoc =
-    !!getUrl("gst_file") || !!getUrl("pan_file") || !!getUrl("cheque_file") || formFiles.some((f) => !!f.url);
+  const hasFormFiles = formFiles.some((f) => !!f.url);
+  const hasLegacyDocs = !!getUrl("gst_file") || !!getUrl("pan_file") || !!getUrl("cheque_file");
+  const hasAnyDoc = hasLegacyDocs || hasFormFiles;
+  const showLegacySlots = !hasFormFiles || hasLegacyDocs;
 
   return (
     <div className="space-y-4">
@@ -99,28 +101,30 @@ export function DocumentsPanel({
         )}
       </div>
 
-      {formFiles.length > 0 && (
+      {hasFormFiles && (
         <div className="space-y-3">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Form uploads</p>
-          {formFiles.map((f) => (
+          {formFiles.filter((f) => !!f.url).map((f) => {
+            const url = fileUrl(f.url) || f.url;
+            return (
             <div key={f.field_id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/50">
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{f.label}</p>
               </div>
               <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start">
-                {isImage(f.url) ? (
-                  <img src={f.url} alt={f.label} className="h-28 w-full max-w-[200px] rounded-xl border border-slate-200 object-cover" />
+                {isImage(url) ? (
+                  <img src={url} alt={f.label} className="h-28 w-full max-w-[200px] rounded-xl border border-slate-200 object-cover" />
                 ) : (
                   <div className="flex h-28 w-full max-w-[200px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
                     <FileText className="h-10 w-10 text-slate-300" />
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" className="h-9 gap-1.5 text-xs" onClick={() => setPreview({ url: f.url, label: f.label })}>
+                  <Button variant="outline" className="h-9 gap-1.5 text-xs" onClick={() => setPreview({ url, label: f.label })}>
                     <Eye className="h-3.5 w-3.5" /> Show
                   </Button>
                   <a
-                    href={f.url}
+                    href={url}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-600 hover:bg-slate-50"
@@ -130,12 +134,15 @@ export function DocumentsPanel({
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {DOC_FIELDS.map(({ key, label, accept }) => {
+      {showLegacySlots && DOC_FIELDS.map(({ key, label, accept }) => {
         const url = getUrl(key);
+        // When form uploads exist, only show legacy slots that already have a file
+        if (hasFormFiles && !url) return null;
         const name = getName(key);
         const busy = uploading === key || (upload.isPending && uploading === key);
 
@@ -208,6 +215,12 @@ export function DocumentsPanel({
           </div>
         );
       })}
+
+      {!hasAnyDoc && (
+        <p className="rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700">
+          No documents uploaded yet. BDM form file fields appear here after upload/submit.
+        </p>
+      )}
 
       {canVerify && hasAnyDoc && (
         <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">

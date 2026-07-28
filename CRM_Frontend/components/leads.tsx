@@ -6,7 +6,7 @@ import { DocumentsPanel } from "@/components/documents-panel";
 import { DynamicForm } from "@/components/dynamic-form";
 import { hasWizardSteps } from "@/lib/form-steps";
 import { LeadActivityTimeline } from "@/components/lead-activity";
-import { api, getProjectId, onProjectChange, LEAD_STATUSES, type CallOutcome, type CreateLeadData, type Lead, type UpdateLeadData } from "@/lib/api";
+import { api, fileUrl, getProjectId, onProjectChange, LEAD_STATUSES, type CallOutcome, type CreateLeadData, type Lead, type UpdateLeadData } from "@/lib/api";
 import { schemaForFill } from "@/lib/form-fields";
 import { LogCallForm } from "@/components/log-call";
 import { cn } from "@/lib/utils";
@@ -744,7 +744,7 @@ function LeadDetailModal({
       .filter((f) => f.type === "file")
       .map((f) => {
         const raw = data[f.field_id];
-        const url = typeof raw === "string" ? raw : "";
+        const url = typeof raw === "string" ? (fileUrl(raw) || raw) : "";
         return { field_id: f.field_id, label: f.label || f.field_id, url };
       })
       .filter((f) => !!f.url);

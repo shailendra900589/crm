@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui";
 import { SearchableSelect } from "@/components/searchable-select";
-import { api } from "@/lib/api";
+import { api, fileUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { FormField } from "@/lib/api";
 import {
@@ -420,7 +420,7 @@ function FileUploadField({
   const maxMb = field.max_file_mb || 10;
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
-  const displayUrl = typeof value === "string" && value.startsWith("http") ? value : null;
+  const displayUrl = typeof value === "string" ? fileUrl(value) : null;
   const displayName = typeof value === "string" ? (displayUrl ? value.split("/").pop()?.split("?")[0] : value) : "";
 
   const handleFile = async (file: File) => {
