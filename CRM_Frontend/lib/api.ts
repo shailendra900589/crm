@@ -162,6 +162,30 @@ export const api = {
   login: (username: string, password: string) =>
     request<Tokens>("/api/auth/login/", { method: "POST", body: JSON.stringify({ username, password }) }),
 
+  /** Exchange Trackbook HRMS SSO ticket for CRM JWT (iframe / mobile embed). */
+  loginWithTrackbookSso: async (ticket: string) => {
+    const res = await fetch(`${API}/api/auth/hrms-sso/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "X-Trackbook-SSO": ticket,
+      },
+      body: JSON.stringify({ ticket, trackbook_sso: ticket }),
+    });
+    const data = (await res.json().catch(() => ({}))) as Tokens & {
+      detail?: string;
+      login_mode?: string;
+    };
+    if (!res.ok) {
+      throw new Error(
+        typeof data.detail === "string" ? data.detail : "Trackbook SSO login failed",
+      );
+    }
+    if (data?.access && data?.refresh) saveTokens(data);
+    return data;
+  },
+
   me: () => request<CrmUser>("/api/me/"),
   updateMe: (data: { first_name?: string; last_name?: string; email?: string; mobile_number?: string }) =>
     request<CrmUser>("/api/me/", { method: "PATCH", body: JSON.stringify(data) }),

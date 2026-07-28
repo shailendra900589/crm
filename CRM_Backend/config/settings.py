@@ -33,7 +33,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Clickjacking DENY replaced by AllowTrackbookEmbedMiddleware (HRMS iframe).
+    "api.embed_middleware.AllowTrackbookEmbedMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -195,6 +196,10 @@ STORAGES = {
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Trackbook HRMS SSO bridge (must match HRMS CRM_PRO_SSO_SECRET when set).
+CRM_PRO_SSO_SECRET = os.getenv("CRM_PRO_SSO_SECRET", "").strip()
+HRMS_API_BASE_URL = os.getenv("HRMS_API_BASE_URL", "https://hrms.trackbook.co").rstrip("/")
 
 LOGGING = {
     "version": 1,
