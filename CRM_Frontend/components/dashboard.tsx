@@ -26,7 +26,6 @@ import {
   TrendingUp,
   UserPlus,
   Users,
-  ClipboardCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
