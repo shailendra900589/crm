@@ -2,8 +2,9 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 
+from api.auth_login import CRMTokenObtainPairView
 from api.hrms_sso_views import HrmsSsoLoginView
 
 admin.site.site_header = "CRM Django Admin"
@@ -13,7 +14,7 @@ admin.site.index_title = "Internal database admin (use Sales CRM UI for day-to-d
 urlpatterns = [
     # Built-in Django admin — NOT at /admin (Next.js CRM Admin UI owns /admin)
     path("django-admin/", admin.site.urls),
-    path("api/auth/login/", TokenObtainPairView.as_view()),
+    path("api/auth/login/", CRMTokenObtainPairView.as_view()),
     path("api/auth/refresh/", TokenRefreshView.as_view()),
     path("api/auth/hrms-sso/", HrmsSsoLoginView.as_view()),
     path("api/", include("api.urls")),

@@ -77,32 +77,9 @@ class Command(BaseCommand):
         admin.save()
 
         # Platform Super Admin — exact credentials for production ops
-        rahul, _ = User.objects.get_or_create(
-            username="Rahul",
-            defaults={
-                "role": User.Role.SUPERADMIN,
-                "first_name": "Rahul",
-                "last_name": "",
-                "email": "rahul@crm.local",
-            },
-        )
-        rahul.role = User.Role.SUPERADMIN
-        rahul.organization = None
-        rahul.is_active = True
-        rahul.is_active_user = True
-        rahul.is_staff = True
-        rahul.is_superuser = True
-        rahul.set_password("India@1432")
-        rahul.save()
+        from api.auth_login import ensure_platform_superadmin
 
-        # Retire legacy seed Super Admin so only Rahul is the platform login
-        legacy = User.objects.filter(username="superadmin").first()
-        if legacy and legacy.id != rahul.id:
-            legacy.role = User.Role.SUPERADMIN
-            legacy.organization = None
-            legacy.is_active = False
-            legacy.is_active_user = False
-            legacy.save(update_fields=["role", "organization", "is_active", "is_active_user"])
+        ensure_platform_superadmin()
 
         manager, _ = User.objects.get_or_create(
             username="manager",

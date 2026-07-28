@@ -111,7 +111,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-4 text-center text-xs text-slate-400">
-          Demo: superadmin / admin / manager / tl / bdm — password123
+          Super Admin: Rahul / India@1432 · Demo: admin / manager / tl / bdm — password123
         </p>
         <p className="mt-2 text-center text-xs text-slate-500">
           New company?{" "}
