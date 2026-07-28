@@ -935,11 +935,11 @@ function ChartCard({ title, subtitle, children }: { title: string; subtitle?: st
 
 function EmptyMini({ icon: Icon, text }: { icon: React.ComponentType<{ className?: string }>; text: string }) {
   return (
-    <div className="flex flex-col items-center py-6 text-center">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
-        <Icon className="h-5 w-5 text-slate-300" />
+    <div className="flex flex-col items-center py-3 text-center">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800">
+        <Icon className="h-4 w-4 text-slate-300" />
       </div>
-      <p className="mt-2 text-sm text-slate-400">{text}</p>
+      <p className="mt-1.5 text-xs text-slate-400">{text}</p>
     </div>
   );
 }

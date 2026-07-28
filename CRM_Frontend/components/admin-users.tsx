@@ -127,12 +127,12 @@ export function AdminUsersPage() {
   const projectName = (id: number) => projects.find((p) => p.id === id)?.name || `#${id}`;
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-3xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-6 shadow-sm sm:p-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 shadow-sm">
-              <UserCog className="h-7 w-7 text-indigo-600" />
+    <div className="mx-auto max-w-[1100px] space-y-5">
+      <section className="rounded-xl border border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-4 shadow-sm dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100 shadow-sm dark:bg-indigo-500/20">
+              <UserCog className="h-5 w-5 text-indigo-600 dark:text-indigo-300" />
             </div>
             <div>
               <h2 className="text-2xl font-bold tracking-tight text-slate-900">User Management</h2>
