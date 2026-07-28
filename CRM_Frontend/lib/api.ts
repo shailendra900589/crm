@@ -221,10 +221,18 @@ export const api = {
     }),
   organizations: () => requestList<Organization>(`/api/organizations/`),
   organization: (id: number) => request<Organization>(`/api/organizations/${id}/`),
+  createOrganization: (data: Record<string, unknown>) =>
+    request<Organization>(`/api/organizations/`, { method: "POST", body: JSON.stringify(data) }),
+  platformSummary: () =>
+    request<PlatformSummary>(`/api/organizations/platform_summary/`),
   approveOrganization: (id: number, data: Record<string, unknown>) =>
     request<Organization>(`/api/organizations/${id}/approve/`, { method: "POST", body: JSON.stringify(data) }),
   rejectOrganization: (id: number, data?: Record<string, unknown>) =>
     request<Organization>(`/api/organizations/${id}/reject/`, { method: "POST", body: JSON.stringify(data || {}) }),
+  suspendOrganization: (id: number, data?: Record<string, unknown>) =>
+    request<Organization>(`/api/organizations/${id}/suspend/`, { method: "POST", body: JSON.stringify(data || {}) }),
+  reactivateOrganization: (id: number, data?: Record<string, unknown>) =>
+    request<Organization>(`/api/organizations/${id}/reactivate/`, { method: "POST", body: JSON.stringify(data || {}) }),
   setOrganizationPayment: (id: number, data: Record<string, unknown>) =>
     request<Organization>(`/api/organizations/${id}/set_payment/`, { method: "POST", body: JSON.stringify(data) }),
   syncHrmsEmployees: (id: number, data: { hrms_token: string; force?: boolean }) =>
@@ -911,6 +919,21 @@ export type Organization = {
   user_count?: number;
   project_count?: number;
   access_allowed?: boolean;
+};
+
+export type PlatformSummary = {
+  companies_total: number;
+  by_status: {
+    pending: number;
+    trial: number;
+    active: number;
+    suspended: number;
+    rejected: number;
+  };
+  users_total: number;
+  projects_total: number;
+  pending_registrations: number;
+  access_allowed: number;
 };
 
 export type VerificationWork = {

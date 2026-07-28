@@ -76,23 +76,33 @@ class Command(BaseCommand):
         admin.set_password("password123")
         admin.save()
 
-        superadmin, _ = User.objects.get_or_create(
-            username="superadmin",
+        # Platform Super Admin — exact credentials for production ops
+        rahul, _ = User.objects.get_or_create(
+            username="Rahul",
             defaults={
                 "role": User.Role.SUPERADMIN,
-                "first_name": "Super",
-                "last_name": "Admin",
-                "email": "superadmin@crm.local",
+                "first_name": "Rahul",
+                "last_name": "",
+                "email": "rahul@crm.local",
             },
         )
-        superadmin.role = User.Role.SUPERADMIN
-        superadmin.organization = None
-        superadmin.is_active = True
-        superadmin.is_active_user = True
-        superadmin.is_staff = True
-        superadmin.is_superuser = True
-        superadmin.set_password("password123")
-        superadmin.save()
+        rahul.role = User.Role.SUPERADMIN
+        rahul.organization = None
+        rahul.is_active = True
+        rahul.is_active_user = True
+        rahul.is_staff = True
+        rahul.is_superuser = True
+        rahul.set_password("India@1432")
+        rahul.save()
+
+        # Retire legacy seed Super Admin so only Rahul is the platform login
+        legacy = User.objects.filter(username="superadmin").first()
+        if legacy and legacy.id != rahul.id:
+            legacy.role = User.Role.SUPERADMIN
+            legacy.organization = None
+            legacy.is_active = False
+            legacy.is_active_user = False
+            legacy.save(update_fields=["role", "organization", "is_active", "is_active_user"])
 
         manager, _ = User.objects.get_or_create(
             username="manager",
@@ -266,7 +276,7 @@ class Command(BaseCommand):
                     )
 
         self.stdout.write(self.style.SUCCESS(
-            "Seeded: admin/manager/tl/bdm + 3 projects + teams + custom forms + 5 leads per project"
+            "Seeded: SuperAdmin Rahul / India@1432 · org admin/manager/tl/bdm + projects"
         ))
 
         from api.page_access import ensure_default_page_permissions

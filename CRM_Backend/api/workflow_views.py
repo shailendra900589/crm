@@ -131,6 +131,76 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only Super Admin can create organizations here.")
         return super().create(request, *args, **kwargs)
 
+    @action(detail=False, methods=["get"])
+    def platform_summary(self, request):
+        """Super Admin KPI snapshot across all tenants."""
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        qs = Organization.objects.all()
+        by_status = {
+            row["status"]: row["c"]
+            for row in qs.values("status").annotate(c=Count("id"))
+        }
+        users_total = User.objects.filter(organization__isnull=False, is_active_user=True).count()
+        projects_total = Project.objects.filter(is_active=True).count()
+        pending_regs = qs.filter(status=Organization.Status.PENDING).count()
+        return Response(
+            {
+                "companies_total": qs.count(),
+                "by_status": {
+                    "pending": by_status.get(Organization.Status.PENDING, 0),
+                    "trial": by_status.get(Organization.Status.TRIAL, 0),
+                    "active": by_status.get(Organization.Status.ACTIVE, 0),
+                    "suspended": by_status.get(Organization.Status.SUSPENDED, 0),
+                    "rejected": by_status.get(Organization.Status.REJECTED, 0),
+                },
+                "users_total": users_total,
+                "projects_total": projects_total,
+                "pending_registrations": pending_regs,
+                "access_allowed": qs.filter(
+                    status__in=[Organization.Status.TRIAL, Organization.Status.ACTIVE]
+                ).count(),
+            }
+        )
+
+    @action(detail=True, methods=["post"])
+    def suspend(self, request, pk=None):
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        org = self.get_object()
+        reason = (request.data.get("reason") or request.data.get("payment_notes") or "").strip()
+        org.status = Organization.Status.SUSPENDED
+        if reason:
+            org.payment_notes = reason
+        org.is_public = False
+        org.save(update_fields=["status", "payment_notes", "is_public"])
+        User.objects.filter(organization=org, role=User.Role.ADMIN).update(is_active_user=False)
+        return Response(OrganizationSerializer(org).data)
+
+    @action(detail=True, methods=["post"])
+    def reactivate(self, request, pk=None):
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        org = self.get_object()
+        mode = (request.data.get("mode") or "active").lower()
+        if mode == "trial":
+            days = int(request.data.get("trial_days") or 14)
+            org.status = Organization.Status.TRIAL
+            org.plan_label = (request.data.get("plan_label") or org.plan_label or "Trial").strip()
+            org.trial_ends_at = timezone.now() + timedelta(days=max(1, days))
+        else:
+            org.status = Organization.Status.ACTIVE
+            org.plan_label = (request.data.get("plan_label") or org.plan_label or "Paid").strip()
+            org.trial_ends_at = None
+        if "payment_notes" in request.data:
+            org.payment_notes = request.data.get("payment_notes") or ""
+        org.is_public = bool(request.data.get("is_public", True))
+        org.approved_by = request.user
+        org.approved_at = timezone.now()
+        org.save()
+        User.objects.filter(organization=org, role=User.Role.ADMIN).update(is_active_user=True, is_active=True)
+        return Response(OrganizationSerializer(org).data)
+
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
         if not is_superadmin(request.user):

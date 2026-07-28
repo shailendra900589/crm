@@ -58,9 +58,9 @@ export const ADMIN_NAV: NavEntry[] = [
   { pageKey: "profile", href: "/profile", icon: UserRound, labels: { default: "Profile" } },
 ];
 
-/** Platform Super Admin — companies / tenants only (never org Users) */
+/** Platform Super Admin — tenant dashboard only (never org Users) */
 export const SUPER_ADMIN_NAV: NavEntry[] = [
-  { pageKey: "admin.organizations", href: "/admin/organizations", icon: Building2, labels: { default: "Companies" } },
+  { pageKey: "admin.organizations", href: "/admin/organizations", icon: LayoutDashboard, labels: { default: "Platform" } },
   { pageKey: "profile", href: "/profile", icon: UserRound, labels: { default: "Profile" } },
 ];
 

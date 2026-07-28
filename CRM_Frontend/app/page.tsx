@@ -79,7 +79,7 @@ export default function LoginPage() {
             <Input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="admin / bdm / tl / manager"
+              placeholder="Rahul / admin / bdm / tl"
               autoComplete="username"
               autoFocus
             />
