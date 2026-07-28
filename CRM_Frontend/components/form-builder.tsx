@@ -2,7 +2,7 @@
 
 import { DynamicForm } from "@/components/dynamic-form";
 import { Button, Input } from "@/components/ui";
-import { api, getProjectId, setProjectId, type FormField, type Project } from "@/lib/api";
+import { api, getProjectId, setProjectId, type FormField, type FormOptionFlow, type FormOptionRule, type Project } from "@/lib/api";
 import {
   defaultField,
   FIELD_TYPE_OPTIONS,
@@ -11,6 +11,14 @@ import {
   isOptionField,
   METRIC_ROLE_OPTIONS,
 } from "@/lib/form-fields";
+import {
+  fieldOptionsForRules,
+  getOptionRule,
+  OPTION_FLOW_LABELS,
+  removeOptionRule,
+  renameOptionRule,
+  upsertOptionRule,
+} from "@/lib/form-rules";
 import { countStepBreaks, defaultStepBreak, hasWizardSteps } from "@/lib/form-steps";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -71,43 +79,125 @@ function typeLabel(type: string) {
 }
 
 function OptionsEditor({
-  options,
+  field,
+  schema,
   onChange,
 }: {
-  options: string[];
-  onChange: (options: string[]) => void;
+  field: FormField;
+  schema: FormField[];
+  onChange: (patch: Partial<FormField>) => void;
 }) {
+  const options = field.options || [];
+  const otherFields = fieldOptionsForRules(schema, field.field_id);
+
+  const setOptionLabel = (index: number, label: string) => {
+    const prev = options[index];
+    const next = [...options];
+    next[index] = label;
+    onChange({
+      options: next,
+      option_rules: renameOptionRule(field.option_rules, prev, label),
+    });
+  };
+
+  const removeOption = (index: number) => {
+    const removed = options[index];
+    onChange({
+      options: options.filter((_, idx) => idx !== index),
+      option_rules: removeOptionRule(field.option_rules, removed),
+    });
+  };
+
+  const patchRule = (option: string, patch: Partial<Omit<FormOptionRule, "option">>) => {
+    onChange({ option_rules: upsertOptionRule(field, option, patch) });
+  };
+
   return (
-    <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Options</p>
-      {options.map((opt, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-xs font-medium text-slate-400">
-            {i + 1}
-          </span>
-          <Input
-            value={opt}
-            placeholder={`Option ${i + 1}`}
-            className="border-slate-700 bg-slate-950 text-slate-100"
-            onChange={(e) => {
-              const next = [...options];
-              next[i] = e.target.value;
-              onChange(next);
-            }}
-          />
-          <button
-            type="button"
-            disabled={options.length <= 1}
-            onClick={() => onChange(options.filter((_, idx) => idx !== i))}
-            className="rounded-lg p-2 text-slate-500 hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-30"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      ))}
+    <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Options</p>
+        <p className="mt-0.5 text-[11px] text-slate-500">
+          Set flow + which fields open when each option is selected
+        </p>
+      </div>
+      {options.map((opt, i) => {
+        const rule = getOptionRule(field, opt);
+        const flow = rule?.flow || "continue";
+        const showIds = new Set(rule?.show_field_ids || []);
+        return (
+          <div key={i} className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-xs font-medium text-slate-400">
+                {i + 1}
+              </span>
+              <Input
+                value={opt}
+                placeholder={`Option ${i + 1}`}
+                className="border-slate-700 bg-slate-950 text-slate-100"
+                onChange={(e) => setOptionLabel(i, e.target.value)}
+              />
+              <button
+                type="button"
+                disabled={options.length <= 1}
+                onClick={() => removeOption(i)}
+                className="rounded-lg p-2 text-slate-500 hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-30"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">When selected</p>
+                <select
+                  value={flow}
+                  onChange={(e) => patchRule(opt, { flow: e.target.value as FormOptionFlow })}
+                  className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 text-xs font-medium text-slate-200 outline-none focus:border-sky-500/50"
+                >
+                  {(Object.keys(OPTION_FLOW_LABELS) as FormOptionFlow[]).map((key) => (
+                    <option key={key} value={key}>
+                      {OPTION_FLOW_LABELS[key]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Also show fields</p>
+                {otherFields.length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-slate-800 px-2 py-2 text-[11px] text-slate-600">
+                    Add other questions first
+                  </p>
+                ) : (
+                  <div className="max-h-28 space-y-1 overflow-y-auto rounded-lg border border-slate-800 p-2">
+                    {otherFields.map((f) => {
+                      const checked = showIds.has(f.id);
+                      return (
+                        <label key={f.id} className="flex cursor-pointer items-center gap-2 text-[11px] text-slate-300">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-950 text-sky-500"
+                            checked={checked}
+                            onChange={(e) => {
+                              const next = new Set(showIds);
+                              if (e.target.checked) next.add(f.id);
+                              else next.delete(f.id);
+                              patchRule(opt, { show_field_ids: Array.from(next) });
+                            }}
+                          />
+                          <span className="truncate">{f.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
       <button
         type="button"
-        onClick={() => onChange([...options, `Option ${options.length + 1}`])}
+        onClick={() => onChange({ options: [...options, `Option ${options.length + 1}`] })}
         className="flex items-center gap-2 rounded-xl border border-dashed border-slate-700 px-3 py-2 text-sm font-medium text-sky-300 hover:border-sky-500/40 hover:bg-sky-500/5"
       >
         <Plus className="h-4 w-4" />
@@ -191,6 +281,7 @@ function FieldCard({
   field,
   index,
   selected,
+  schema,
   onSelect,
   onChange,
   onRemove,
@@ -199,6 +290,7 @@ function FieldCard({
   field: FormField;
   index: number;
   selected: boolean;
+  schema: FormField[];
   onSelect: () => void;
   onChange: (f: FormField) => void;
   onRemove: () => void;
@@ -220,8 +312,13 @@ function FieldCard({
       metric_role: isMoneyField(type) ? field.metric_role || next.metric_role : undefined,
       currency: type === "currency" ? field.currency || "INR" : undefined,
       options: isOptionField(type) ? field.options || ["Option 1", "Option 2"] : undefined,
+      option_rules: isOptionField(type) ? field.option_rules : undefined,
     });
   };
+
+  const hasRules = (field.option_rules || []).some(
+    (r) => (r.flow && r.flow !== "continue") || (r.show_field_ids && r.show_field_ids.length),
+  );
 
   return (
     <Reorder.Item
@@ -263,6 +360,7 @@ function FieldCard({
                 <p className="text-xs text-slate-500">
                   {typeLabel(field.type)}
                   {field.required ? " · Required" : ""}
+                  {hasRules ? " · Rules" : ""}
                   {field.metric_role ? ` · ${METRIC_ROLE_OPTIONS.find((m) => m.value === field.metric_role)?.label || field.metric_role}` : ""}
                 </p>
               </div>
@@ -300,7 +398,11 @@ function FieldCard({
               </div>
 
               {isOptionField(field.type) && (
-                <OptionsEditor options={field.options || []} onChange={(options) => onChange({ ...field, options })} />
+                <OptionsEditor
+                  field={field}
+                  schema={schema}
+                  onChange={(patch) => onChange({ ...field, ...patch })}
+                />
               )}
 
               {field.type === "file" && (
@@ -583,6 +685,9 @@ export function FormBuilder() {
       field_id: `field_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       label: `${source.label} (copy)`,
       options: source.options ? [...source.options] : undefined,
+      option_rules: source.option_rules
+        ? source.option_rules.map((r) => ({ ...r, show_field_ids: r.show_field_ids ? [...r.show_field_ids] : undefined }))
+        : undefined,
     };
     const next = [...schema];
     next.splice(index + 1, 0, copy);
@@ -714,6 +819,7 @@ export function FormBuilder() {
                         field={f}
                         index={i}
                         selected={selectedIdx === i}
+                        schema={schema}
                         onSelect={() => setSelectedIdx(i)}
                         onChange={(updated) => {
                           const s = [...schema];

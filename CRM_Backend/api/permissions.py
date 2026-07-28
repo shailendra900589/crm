@@ -244,13 +244,63 @@ def validate_form_answers(schema, answers):
         "document": [".pdf", ".doc", ".docx", ".xls", ".xlsx"],
     }
 
+    def selected_options(field):
+        fid = field.get("field_id")
+        raw = answers.get(fid)
+        if field.get("type") == "multiselect":
+            return [str(x) for x in raw] if isinstance(raw, list) else []
+        if raw is None or raw == "":
+            return []
+        return [str(raw)]
+
+    # Fields only shown when an option rule reveals them
+    conditional_ids = set()
+    revealed_ids = set()
+    for field in schema or []:
+        for rule in field.get("option_rules") or []:
+            for sid in rule.get("show_field_ids") or []:
+                conditional_ids.add(sid)
+        if not field.get("option_rules"):
+            continue
+        selected = selected_options(field)
+        for rule in field.get("option_rules") or []:
+            if rule.get("option") in selected:
+                for sid in rule.get("show_field_ids") or []:
+                    revealed_ids.add(sid)
+
+    # Early-end flow: skip required checks on later step panels
+    end_early = False
+    for field in schema or []:
+        for rule in field.get("option_rules") or []:
+            if rule.get("option") in selected_options(field) and rule.get("flow") == "end":
+                end_early = True
+                break
+        if end_early:
+            break
+
+    # If next_step is also selected, it wins over end
+    if end_early:
+        for field in schema or []:
+            for rule in field.get("option_rules") or []:
+                if rule.get("option") in selected_options(field) and rule.get("flow") == "next_step":
+                    end_early = False
+                    break
+
+    past_break_after_end = False
     for field in schema or []:
         fid = field.get("field_id")
         if not fid:
             continue
         ftype = field.get("type", "text")
         if ftype == "step_break":
+            if end_early:
+                past_break_after_end = True
             continue
+        if past_break_after_end:
+            continue
+        if fid in conditional_ids and fid not in revealed_ids:
+            continue
+
         val = answers.get(fid)
         label = field.get("label", fid)
 

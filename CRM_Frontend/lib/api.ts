@@ -605,12 +605,29 @@ export type FormFieldType =
 /** Tags currency/number fields so dashboards can roll up Collection / Pending / Deal value */
 export type FormMetricRole = "collection" | "pending_amount" | "deal_value";
 
+/**
+ * Per-option flow when a dropdown / radio / multiselect value is chosen.
+ * - continue: keep normal wizard flow
+ * - end: stop here — submit without later step panels
+ * - next_step: unlock / require the next step panel (e.g. documents)
+ */
+export type FormOptionFlow = "continue" | "end" | "next_step";
+
+export type FormOptionRule = {
+  option: string;
+  flow?: FormOptionFlow;
+  /** Reveal these fields when this option is selected */
+  show_field_ids?: string[];
+};
+
 export type FormField = {
   field_id: string;
   label: string;
   type: FormFieldType | string;
   required?: boolean;
   options?: string[];
+  /** Rules keyed by option label for choice fields */
+  option_rules?: FormOptionRule[];
   placeholder?: string;
   help_text?: string;
   min?: number;

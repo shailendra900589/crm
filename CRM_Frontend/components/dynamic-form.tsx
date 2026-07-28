@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui";
 import { SearchableSelect } from "@/components/searchable-select";
 import { api } from "@/lib/api";
@@ -13,6 +13,7 @@ import {
   isFullWidthField,
   validateFileSelection,
 } from "@/lib/form-fields";
+import { getVisibleFields, shouldEndFormEarly } from "@/lib/form-rules";
 import {
   hasWizardSteps,
   splitSchemaIntoSteps,
@@ -84,9 +85,11 @@ export function DynamicForm({
     );
   }
 
+  const visible = getVisibleFields(schema, values).filter((f) => f.type !== "step_break");
+
   return (
     <FormFieldsBlock
-      fields={schema}
+      fields={visible}
       values={values}
       onChange={onChange}
       readOnly={readOnly}
@@ -117,14 +120,24 @@ function WizardForm({
   submitLabel: string;
   submitting?: boolean;
 }) {
-  const steps = splitSchemaIntoSteps(schema);
+  const steps = useMemo(() => splitSchemaIntoSteps(schema), [schema]);
+  const visibleIds = useMemo(
+    () => new Set(getVisibleFields(schema, values).map((f) => f.field_id)),
+    [schema, values],
+  );
   const [stepIdx, setStepIdx] = useState(0);
   const [errors, setErrors] = useState<string[]>([]);
   const step = steps[stepIdx] ?? steps[0];
-  const isLast = stepIdx >= steps.length - 1;
+  const stepFields = (step?.fields || []).filter((f) => visibleIds.has(f.field_id));
+  const endEarly = shouldEndFormEarly(schema, values, stepIdx, steps.length);
+  const isLast = endEarly || stepIdx >= steps.length - 1;
+
+  useEffect(() => {
+    if (stepIdx > steps.length - 1) setStepIdx(Math.max(0, steps.length - 1));
+  }, [stepIdx, steps.length]);
 
   const goNext = () => {
-    const stepErrors = validateStepValues(step.fields, values);
+    const stepErrors = validateStepValues(stepFields, values);
     if (stepErrors.length) {
       setErrors(stepErrors);
       return;
@@ -140,7 +153,6 @@ function WizardForm({
 
   return (
     <div className="space-y-4">
-      {/* Step indicator */}
       <div className="flex flex-wrap items-center gap-2">
         {steps.map((s, i) => (
           <button
@@ -180,12 +192,13 @@ function WizardForm({
           <div className="mb-4 border-b border-slate-200 pb-3 dark:border-slate-700">
             <p className="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-300">
               Step {stepIdx + 1} of {steps.length}
+              {endEarly && stepIdx < steps.length - 1 ? " · Ending here" : ""}
             </p>
           </div>
         )}
 
         <FormFieldsBlock
-          fields={step.fields}
+          fields={stepFields}
           values={values}
           onChange={onChange}
           readOnly={readOnly}
@@ -222,7 +235,7 @@ function WizardForm({
                 <button
                   type="button"
                   onClick={() => {
-                    const stepErrors = validateStepValues(step.fields, values);
+                    const stepErrors = validateStepValues(stepFields, values);
                     if (stepErrors.length) {
                       setErrors(stepErrors);
                       return;
