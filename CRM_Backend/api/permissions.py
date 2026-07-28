@@ -65,27 +65,116 @@ def verification_works_for_user(user):
     if is_superadmin(user):
         return qs
     if is_company_admin(user):
-        # Include works whose org FK was left null but lead/project belongs to this company
+        # Company Admin must see every tenant submission — including orphan org FKs
         if user.organization_id:
             oid = user.organization_id
             return qs.filter(
                 Q(organization_id=oid)
+                | Q(organization_id__isnull=True)
                 | Q(lead__project__organization_id=oid)
+                | Q(lead__project__organization_id__isnull=True)
                 | Q(lead__bdm__organization_id=oid)
+                | Q(lead__bdm__organization_id__isnull=True)
             ).distinct()
         return qs
     if user.role in (User.Role.MANAGER, User.Role.TL):
         ids = get_descendant_ids(user)
         ids.add(user.id)
-        pids = project_ids_for_user(user) or set()
-        return qs.filter(
+        pids = set(project_ids_for_user(user) or set())
+        # Inherit projects from team BDMs so Manager sees their submissions even without own assignment
+        if ids:
+            from .models import Team
+
+            pids.update(
+                User.objects.filter(id__in=ids)
+                .exclude(id=user.id)
+                .values_list("assigned_projects", flat=True)
+            )
+            pids.update(
+                Team.objects.filter(Q(manager_id__in=ids) | Q(members__id__in=ids))
+                .exclude(project_id=None)
+                .values_list("project_id", flat=True)
+            )
+            pids = {i for i in pids if i}
+
+        q = (
             Q(assigned_to_id__in=ids)
             | Q(assigned_by=user)
             | Q(lead__bdm_id__in=ids)
-            | Q(status__in=["open", "reopened"], lead__project_id__in=pids)
-        ).distinct()
-    # Ops (and BDM if assigned) — only own queue
-    return qs.filter(assigned_to=user)
+            | Q(form_submission__submitted_by_id__in=ids)
+        )
+        if pids:
+            # All statuses on shared projects (not only open)
+            q |= Q(lead__project_id__in=pids)
+        if user.organization_id:
+            oid = user.organization_id
+            q |= Q(organization_id=oid) | Q(lead__project__organization_id=oid) | Q(lead__bdm__organization_id=oid)
+            # Orphan org rows still visible when BDM is under this manager
+            q |= Q(organization_id__isnull=True, lead__bdm_id__in=ids)
+        return qs.filter(q).distinct()
+
+    if user.role == User.Role.OPS:
+        q = Q(assigned_to=user)
+        # Ops can also see unassigned open work in their company so verification can start
+        if user.organization_id:
+            oid = user.organization_id
+            q |= Q(
+                status__in=["open", "reopened"],
+            ) & (
+                Q(organization_id=oid)
+                | Q(organization_id__isnull=True)
+                | Q(lead__project__organization_id=oid)
+                | Q(lead__bdm__organization_id=oid)
+            )
+        return qs.filter(q).distinct()
+
+    # BDM — own queue if assigned verification tasks
+    return qs.filter(Q(assigned_to=user) | Q(lead__bdm=user)).distinct()
+
+
+def leads_for_user(user):
+    from .models import Lead
+
+    if is_admin(user):
+        qs = Lead.objects.all()
+        if is_company_admin(user) and user.organization_id:
+            oid = user.organization_id
+            qs = qs.filter(
+                Q(project__organization_id=oid)
+                | Q(project__organization_id__isnull=True)
+                | Q(bdm__organization_id=oid)
+                | Q(bdm__organization_id__isnull=True)
+            )
+        return qs
+
+    if user.role == User.Role.MANAGER:
+        descendants = get_descendant_ids(user)
+        qs = Lead.objects.filter(Q(bdm=user) | Q(bdm_id__in=descendants))
+    elif user.role == User.Role.TL:
+        team_ids = get_descendant_ids(user)
+        qs = Lead.objects.filter(Q(bdm=user) | Q(bdm_id__in=team_ids))
+    elif user.role == User.Role.OPS:
+        # Ops need lead/form data for verification — via assigned or open company work
+        from .models import VerificationWork
+
+        work_lead_ids = VerificationWork.objects.filter(
+            Q(assigned_to=user)
+            | Q(status__in=["open", "reopened"], organization_id=user.organization_id)
+            | Q(status__in=["open", "reopened"], organization_id__isnull=True)
+        ).values_list("lead_id", flat=True)
+        qs = Lead.objects.filter(id__in=work_lead_ids)
+    else:
+        qs = Lead.objects.filter(bdm=user)
+
+    # Only clamp when user has an explicit project list — never wipe hierarchy leads
+    project_ids = project_ids_for_user(user)
+    if project_ids:
+        if user.role in (User.Role.MANAGER, User.Role.TL):
+            descendants = get_descendant_ids(user)
+            qs = qs.filter(Q(project_id__in=project_ids) | Q(bdm_id__in=descendants) | Q(bdm=user))
+        elif user.role != User.Role.OPS:
+            qs = qs.filter(project_id__in=project_ids)
+    return qs
 
 
 def get_descendant_ids(user):
@@ -119,8 +208,8 @@ def project_ids_for_user(user):
     Effective project scope for hierarchy ACL.
 
     Admin → None (unrestricted).
-    Others → own assigned/team projects ∪ ancestors' (Manager/TL) assigned/team projects.
-    Empty set means no project access (no cross-project leakage).
+    Others → own assigned/team projects ∪ ancestors' (Manager/TL) assigned/team projects
+             ∪ descendants' assigned/team projects (so Manager sees BDM project work).
     """
     if not user or not getattr(user, "is_authenticated", False):
         return set()
@@ -138,7 +227,22 @@ def project_ids_for_user(user):
             ids |= _direct_project_ids(ancestor)
         ancestor = getattr(ancestor, "reports_to", None)
 
-    return ids
+    # Inherit from descendants so Manager/TL see BDM-assigned projects
+    if user.role in (User.Role.MANAGER, User.Role.TL):
+        desc = get_descendant_ids(user)
+        if desc:
+            from .models import Team
+
+            ids.update(
+                User.objects.filter(id__in=desc).values_list("assigned_projects", flat=True)
+            )
+            ids.update(
+                Team.objects.filter(Q(manager_id__in=desc) | Q(members__id__in=desc))
+                .exclude(project_id=None)
+                .values_list("project_id", flat=True)
+            )
+
+    return {i for i in ids if i}
 
 
 def projects_for_user(user):
@@ -146,10 +250,20 @@ def projects_for_user(user):
     from .models import Project
 
     if is_admin(user):
-        return Project.objects.all()
+        qs = Project.objects.all()
+        if is_company_admin(user) and user.organization_id:
+            oid = user.organization_id
+            qs = qs.filter(Q(organization_id=oid) | Q(organization_id__isnull=True))
+        return qs
     ids = project_ids_for_user(user)
     if not ids:
-        return Project.objects.none()
+        # Fallback: projects of leads the user can already see (avoid empty shell)
+        lead_pids = set(
+            leads_for_user(user).exclude(project_id=None).values_list("project_id", flat=True).distinct()[:200]
+        )
+        if not lead_pids:
+            return Project.objects.none()
+        return Project.objects.filter(id__in=lead_pids)
     return Project.objects.filter(id__in=ids)
 
 
@@ -159,7 +273,10 @@ def user_can_access_project(user, project_id):
     if is_admin(user):
         return True
     ids = project_ids_for_user(user)
-    return int(project_id) in ids
+    if int(project_id) in ids:
+        return True
+    # Allow if user has leads on this project (hierarchy fallback)
+    return leads_for_user(user).filter(project_id=project_id).exists()
 
 
 def users_for_user(user):
@@ -194,30 +311,6 @@ def can_manage_user(actor, target):
     if actor.role == User.Role.MANAGER:
         return target.id in get_descendant_ids(actor) or target.reports_to_id == actor.id
     return False
-
-
-def leads_for_user(user):
-    from .models import Lead
-
-    if is_admin(user):
-        return Lead.objects.all()
-
-    if user.role == User.Role.MANAGER:
-        descendants = get_descendant_ids(user)
-        qs = Lead.objects.filter(Q(bdm=user) | Q(bdm_id__in=descendants))
-    elif user.role == User.Role.TL:
-        team_ids = get_descendant_ids(user)
-        qs = Lead.objects.filter(Q(bdm=user) | Q(bdm_id__in=team_ids))
-    else:
-        qs = Lead.objects.filter(bdm=user)
-
-    # Hierarchy project clamp — team only sees manager-assigned projects
-    project_ids = project_ids_for_user(user)
-    if project_ids is not None:
-        if not project_ids:
-            return Lead.objects.none()
-        qs = qs.filter(project_id__in=project_ids)
-    return qs
 
 
 def teams_for_user(user):

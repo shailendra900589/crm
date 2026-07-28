@@ -1009,6 +1009,7 @@ export type AdminDashboardStats = {
   visits_scheduled_today: number;
   upcoming_team_visits: LeadVisit[];
   recent_submissions: FormSubmission[];
+  pending_verifications?: VerificationWork[];
 };
 export type FilterSummary = {
   project_id?: number | null;

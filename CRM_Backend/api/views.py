@@ -357,7 +357,8 @@ class ProjectViewSet(viewsets.ModelViewSet):
         while Project.objects.filter(slug=slug).exists():
             slug = f"{base}-{i}"
             i += 1
-        serializer.save(slug=slug, created_by=self.request.user)
+        org = getattr(self.request.user, "organization", None)
+        serializer.save(slug=slug, created_by=self.request.user, organization=org)
 
     def perform_update(self, serializer):
         if not is_admin(self.request.user):
@@ -591,14 +592,15 @@ class DashboardView(APIView):
         today = date.today()
 
         sub_qs = FormSubmission.objects.filter(custom_form__project_id=pid).select_related(
-            "lead", "submitted_by", "custom_form"
+            "lead", "lead__bdm", "submitted_by", "custom_form"
         )
         if user.role == User.Role.BDM:
-            sub_qs = sub_qs.filter(submitted_by=user)
+            sub_qs = sub_qs.filter(Q(submitted_by=user) | Q(lead__bdm=user))
         elif not is_admin(user):
             ids = get_descendant_ids(user)
             ids.add(user.id)
-            sub_qs = sub_qs.filter(submitted_by_id__in=ids)
+            # Show by submitter OR by lead ownership in hierarchy (Amit submit visible to Manager)
+            sub_qs = sub_qs.filter(Q(submitted_by_id__in=ids) | Q(lead__bdm_id__in=ids))
 
         visits_qs = visits_for_user(user).filter(lead__project_id=pid)
         my_visits_qs = my_assigned_visits(user).filter(lead__project_id=pid)
@@ -829,6 +831,7 @@ class AdminDashboardView(APIView):
             "visits_scheduled_today": visits_qs.filter(scheduled_date=today).count(),
             "upcoming_team_visits": LeadVisitSerializer(visits_qs[:12], many=True).data,
             "recent_submissions": FormSubmissionSerializer(sub_qs[:8], many=True).data,
+            "pending_verifications": [],
             "filter_summary": {
                 "project_id": int(project_filter) if project_filter else None,
                 "project_name": project_name,
@@ -839,6 +842,18 @@ class AdminDashboardView(APIView):
                 "to": request.query_params.get("to"),
             },
         }
+        try:
+            from .permissions import verification_works_for_user
+            from .serializers import VerificationWorkSerializer
+
+            pending_qs = verification_works_for_user(request.user).filter(
+                status__in=["open", "reopened", "assigned", "in_progress"]
+            )
+            if project_filter:
+                pending_qs = pending_qs.filter(lead__project_id=project_filter)
+            payload["pending_verifications"] = VerificationWorkSerializer(pending_qs[:12], many=True).data
+        except Exception:
+            payload["pending_verifications"] = []
         try:
             pids = (
                 [int(project_filter)]

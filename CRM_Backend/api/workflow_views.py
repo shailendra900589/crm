@@ -623,6 +623,8 @@ def ensure_verification_work_for_submission(lead, submission=None, actor=None):
     org = getattr(project, "organization", None)
     if org is None:
         org = getattr(lead.bdm, "organization", None)
+    if org is None and actor is not None:
+        org = getattr(actor, "organization", None)
     doc, _ = LeadDocument.objects.get_or_create(lead=lead)
     existing = (
         VerificationWork.objects.filter(lead=lead, status__in=["open", "assigned", "in_progress", "reopened"])
@@ -640,6 +642,11 @@ def ensure_verification_work_for_submission(lead, submission=None, actor=None):
         if org and existing.organization_id != org.id:
             existing.organization = org
             updates.append("organization")
+        # Always refresh title so queue is recognisable
+        new_title = f"Verify {lead.merchant.name}"
+        if existing.title != new_title:
+            existing.title = new_title
+            updates.append("title")
         if updates:
             updates.append("updated_at")
             existing.save(update_fields=updates)

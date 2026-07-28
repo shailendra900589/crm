@@ -11,6 +11,7 @@ import {
   Building2,
   CalendarClock,
   CheckCircle2,
+  ClipboardCheck,
   ClipboardList,
   Download,
   Factory,
@@ -481,6 +482,40 @@ export function AdminPanel() {
                   <div className="max-h-52 space-y-1 overflow-y-auto">
                     {stats!.upcoming_team_visits.map((v) => (
                       <VisitRow key={v.id} visit={v} />
+                    ))}
+                  </div>
+                </SideCard>
+              )}
+
+              {(stats?.pending_verifications || []).length > 0 && (
+                <SideCard
+                  title="Needs verification"
+                  icon={ClipboardCheck}
+                  badge={stats?.pending_verifications?.length}
+                  actionHref="/verification"
+                  actionLabel="Desk"
+                >
+                  <div className="max-h-64 space-y-1.5 overflow-y-auto">
+                    {stats!.pending_verifications!.map((w) => (
+                      <Link
+                        key={w.id}
+                        href={`/verification`}
+                        className="block rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-2 transition hover:border-amber-400/50"
+                      >
+                        <p className="truncate text-[13px] font-semibold text-slate-100">{w.lead_name}</p>
+                        <p className="truncate text-[11px] text-slate-500">
+                          {w.project_name || "—"} · {w.status_display || w.status}
+                        </p>
+                        {(w.answer_preview || []).length > 0 && (
+                          <div className="mt-1 space-y-0.5">
+                            {w.answer_preview!.slice(0, 3).map((a) => (
+                              <p key={a.field_id} className="truncate text-[10px] text-slate-400">
+                                <span className="font-medium text-slate-300">{a.label}:</span> {a.value}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </Link>
                     ))}
                   </div>
                 </SideCard>

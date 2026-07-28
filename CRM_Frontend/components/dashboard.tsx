@@ -169,7 +169,8 @@ export function DashboardView() {
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["visits"] });
       qc.invalidateQueries({ queryKey: ["admin-dashboard"] });
-      qc.invalidateQueries({ queryKey: ["verification"] });
+      qc.invalidateQueries({ queryKey: ["verification-works"] });
+      qc.invalidateQueries({ queryKey: ["verification-summary"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
       setRemarks("");
     },
@@ -186,7 +187,8 @@ export function DashboardView() {
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["visits"] });
       qc.invalidateQueries({ queryKey: ["admin-dashboard"] });
-      qc.invalidateQueries({ queryKey: ["verification"] });
+      qc.invalidateQueries({ queryKey: ["verification-works"] });
+      qc.invalidateQueries({ queryKey: ["verification-summary"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
       setActiveVisit(null);
       setVisitModalRemarks("");
