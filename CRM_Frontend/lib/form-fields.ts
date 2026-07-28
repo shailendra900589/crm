@@ -110,6 +110,13 @@ export function isMoneyField(type: string) {
   return type === "currency" || type === "number";
 }
 
+/** Hide Amount Collected until admin enables collection on the form. */
+export function schemaForFill(schema: FormField[] | undefined | null, enableCollection?: boolean): FormField[] {
+  const list = schema || [];
+  if (enableCollection) return list;
+  return list.filter((f) => f.metric_role !== "collection");
+}
+
 export function isFullWidthField(type: string) {
   return type === "textarea" || type === "multiselect" || type === "file" || type === "radio";
 }
@@ -152,6 +159,7 @@ export function defaultField(type: FormFieldType | string): FormField {
 
   if (type === "currency") {
     base.currency = "INR";
+    // Pending by default — Amount Collected requires enable_collection on the form
     base.metric_role = "pending_amount";
     base.label = "Collection Pending Amount";
     base.min = 0;

@@ -10,6 +10,7 @@ import {
   isMoneyField,
   isOptionField,
   METRIC_ROLE_OPTIONS,
+  schemaForFill,
 } from "@/lib/form-fields";
 import {
   fieldOptionsForRules,
@@ -624,6 +625,7 @@ export function FormBuilder() {
 
   const [schema, setSchema] = useState<FormField[]>([]);
   const [title, setTitle] = useState("");
+  const [enableCollection, setEnableCollection] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [previewValues, setPreviewValues] = useState<Record<string, unknown>>({});
   const [saved, setSaved] = useState(false);
@@ -644,15 +646,18 @@ export function FormBuilder() {
     if (form) {
       setSchema(form.schema || []);
       setTitle(form.title || "");
+      setEnableCollection(!!form.enable_collection);
       setSelectedIdx(null);
       setPreviewValues({});
     }
   }, [form, pid]);
 
   const save = useMutation({
-    mutationFn: () => api.saveCustomForm(pid, { title, schema, is_active: true }),
+    mutationFn: () =>
+      api.saveCustomForm(pid, { title, schema, is_active: true, enable_collection: enableCollection }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["custom-form", pid] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     },
@@ -770,6 +775,20 @@ export function FormBuilder() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
+              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-slate-700 bg-slate-950/60 px-3 py-3">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-600 bg-slate-950 text-emerald-500 focus:ring-emerald-500"
+                  checked={enableCollection}
+                  onChange={(e) => setEnableCollection(e.target.checked)}
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-100">Enable payment collection</span>
+                  <span className="mt-0.5 block text-[11px] text-slate-500">
+                    When off, Amount Collected fields stay hidden for BDMs until you turn this on.
+                  </span>
+                </span>
+              </label>
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                 {currentProject && (
                   <span
@@ -782,6 +801,13 @@ export function FormBuilder() {
                 <span className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-400">
                   {schema.length} question{schema.length === 1 ? "" : "s"}
                 </span>
+                {enableCollection ? (
+                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-medium text-emerald-300">
+                    Collection on
+                  </span>
+                ) : (
+                  <span className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-500">Collection off</span>
+                )}
                 {moneyFields.length > 0 && (
                   <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 font-medium text-emerald-300">
                     {moneyFields.length} money KPI{moneyFields.length === 1 ? "" : "s"} linked
@@ -868,7 +894,7 @@ export function FormBuilder() {
                   <div className="mt-4">
                     {schema.length > 0 ? (
                       <DynamicForm
-                        schema={schema}
+                        schema={schemaForFill(schema, enableCollection)}
                         values={previewValues}
                         onChange={setPreviewValues}
                         layout="stack"

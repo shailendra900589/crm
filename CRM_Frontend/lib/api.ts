@@ -654,7 +654,15 @@ export type MoneyMetrics = {
   total_pending: number;
   total_deal_value: number;
 };
-export type CustomForm = { id: number; project: number; project_name: string; title: string; schema: FormField[]; is_active: boolean };
+export type CustomForm = {
+  id: number;
+  project: number;
+  project_name: string;
+  title: string;
+  schema: FormField[];
+  is_active: boolean;
+  enable_collection?: boolean;
+};
 export type TeamMember = { id: number; name: string; role: string; username: string };
 export type Team = {
   id: number; name: string; project: number; project_name: string;

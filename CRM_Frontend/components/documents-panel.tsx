@@ -15,13 +15,22 @@ const DOC_FIELDS = [
 
 type DocField = (typeof DOC_FIELDS)[number]["key"];
 
+export type FormFileUpload = {
+  field_id: string;
+  label: string;
+  url: string;
+};
+
 export function DocumentsPanel({
   leadId,
   doc,
+  formFiles = [],
   canVerify,
 }: {
   leadId: number;
   doc?: LeadDocument;
+  /** Dynamic form file fields saved on the lead */
+  formFiles?: FormFileUpload[];
   canVerify: boolean;
 }) {
   const qc = useQueryClient();
@@ -51,6 +60,7 @@ export function DocumentsPanel({
       qc.invalidateQueries({ queryKey: ["lead-activity", leadId] });
       qc.invalidateQueries({ queryKey: ["leads"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 
@@ -67,19 +77,60 @@ export function DocumentsPanel({
   };
 
   const isImage = (url: string) => /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(url);
+  const hasAnyDoc =
+    !!getUrl("gst_file") || !!getUrl("pan_file") || !!getUrl("cheque_file") || formFiles.some((f) => !!f.url);
 
   return (
     <div className="space-y-4">
-      {doc && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-          <span className="text-sm font-medium text-slate-700">Verification:</span>
-          <Badge
-            status={doc.verification_status === "approved" ? "approved" : doc.verification_status === "rejected" ? "rejected" : "pending"}
-            label={doc.verification_status}
-          />
-          {doc.verified_by_name && (
-            <span className="text-xs text-slate-500">by {doc.verified_by_name}</span>
-          )}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/50">
+        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Verification:</span>
+        <Badge
+          status={
+            doc?.verification_status === "approved"
+              ? "approved"
+              : doc?.verification_status === "rejected"
+                ? "rejected"
+                : "pending"
+          }
+          label={doc?.verification_status || (hasAnyDoc ? "pending" : "no uploads")}
+        />
+        {doc?.verified_by_name && (
+          <span className="text-xs text-slate-500">by {doc.verified_by_name}</span>
+        )}
+      </div>
+
+      {formFiles.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Form uploads</p>
+          {formFiles.map((f) => (
+            <div key={f.field_id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+              <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/50">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{f.label}</p>
+              </div>
+              <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start">
+                {isImage(f.url) ? (
+                  <img src={f.url} alt={f.label} className="h-28 w-full max-w-[200px] rounded-xl border border-slate-200 object-cover" />
+                ) : (
+                  <div className="flex h-28 w-full max-w-[200px] items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50">
+                    <FileText className="h-10 w-10 text-slate-300" />
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" className="h-9 gap-1.5 text-xs" onClick={() => setPreview({ url: f.url, label: f.label })}>
+                    <Eye className="h-3.5 w-3.5" /> Show
+                  </Button>
+                  <a
+                    href={f.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 px-3 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    <Download className="h-3.5 w-3.5" /> Open
+                  </a>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -89,9 +140,9 @@ export function DocumentsPanel({
         const busy = uploading === key || (upload.isPending && uploading === key);
 
         return (
-          <div key={key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-800">{label}</p>
+          <div key={key} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/50">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</p>
             </div>
             <div className="p-4">
               {url ? (
@@ -104,7 +155,7 @@ export function DocumentsPanel({
                     </div>
                   )}
                   <div className="flex-1 space-y-2">
-                    <p className="truncate text-sm font-medium text-slate-700">{name}</p>
+                    <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{name}</p>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" className="h-9 gap-1.5 text-xs" onClick={() => setPreview({ url, label })}>
                         <Eye className="h-3.5 w-3.5" /> Show
@@ -158,8 +209,9 @@ export function DocumentsPanel({
         );
       })}
 
-      {canVerify && doc && (
-        <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-4">
+      {canVerify && hasAnyDoc && (
+        <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+          <p className="w-full text-xs text-slate-500">Manager / TL / Admin verification</p>
           <Button
             className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
             disabled={verify.isPending}
@@ -175,6 +227,9 @@ export function DocumentsPanel({
           >
             <XCircle className="h-4 w-4" /> Reject
           </Button>
+          {verify.isError && (
+            <p className="w-full text-xs text-rose-600">{(verify.error as Error)?.message || "Verify failed"}</p>
+          )}
         </div>
       )}
 

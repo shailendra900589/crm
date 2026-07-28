@@ -34,7 +34,9 @@ from .permissions import (
     user_can_access_project,
     user_can_access_project_form,
     users_for_user,
+    effective_form_schema,
     validate_form_answers,
+    validate_single_file_field,
     my_assigned_visits,
     visits_for_user,
 )
@@ -601,7 +603,14 @@ class DashboardView(APIView):
             ).data
 
         return {
-            "project_form": CustomFormSerializer(form).data if form else None,
+            "project_form": (
+                {
+                    **CustomFormSerializer(form).data,
+                    "schema": effective_form_schema(form),
+                }
+                if form
+                else None
+            ),
             "forms_filled_today": sub_qs.filter(submitted_at__date=today).count(),
             "next_visit": LeadVisitSerializer(next_visit).data if next_visit else None,
             "upcoming_visits": LeadVisitSerializer(upcoming, many=True).data,
@@ -1650,22 +1659,47 @@ class LeadViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], parser_classes=[MultiPartParser, FormParser], url_path="upload-form-file")
     def upload_form_file(self, request, pk=None):
         lead = self.get_object()
-        field_id = request.data.get("field_id")
+        field_id = (request.data.get("field_id") or request.POST.get("field_id") or "").strip()
         upload = request.FILES.get("file")
         if not field_id or not upload:
             return Response({"detail": "field_id and file are required."}, status=status.HTTP_400_BAD_REQUEST)
-        form = CustomForm.objects.filter(project=lead.project, is_active=True).first()
+
+        # Prefer the project's form (OneToOne); fall back to active filter
+        form = getattr(lead.project, "custom_form", None)
+        if form is None:
+            form = CustomForm.objects.filter(project=lead.project, is_active=True).first()
         if not form:
-            return Response({"detail": "No custom form for this project."}, status=status.HTTP_404_NOT_FOUND)
-        field_def = next((f for f in (form.schema or []) if f.get("field_id") == field_id), None)
-        if not field_def or field_def.get("type") != "file":
-            return Response({"detail": "Invalid file field."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "No custom form for this project. Ask admin to publish the form."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        if not form.is_active:
+            return Response({"detail": "Form is inactive. Ask admin to publish it."}, status=status.HTTP_400_BAD_REQUEST)
+
+        schema = effective_form_schema(form)
+        field_def = next((f for f in schema if f.get("field_id") == field_id), None)
+        if not field_def:
+            # Also search full schema (in case collection fields are toggled off but ID sent)
+            field_def = next((f for f in (form.schema or []) if f.get("field_id") == field_id), None)
+        if not field_def:
+            return Response(
+                {"detail": f"Unknown form field '{field_id}'. Re-save the form in Form Builder, then try again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if field_def.get("type") != "file":
+            return Response(
+                {"detail": f"Field '{field_def.get('label') or field_id}' is not a file upload field."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         max_mb = float(field_def.get("max_file_mb") or 10)
         if upload.size > max_mb * 1024 * 1024:
             return Response({"detail": f"File must be under {max_mb}MB."}, status=status.HTTP_400_BAD_REQUEST)
-        ext_errors = validate_form_answers(form.schema, {field_id: upload.name})
+
+        ext_errors = validate_single_file_field(field_def, upload.name)
         if ext_errors:
             return Response({"detail": ext_errors}, status=status.HTTP_400_BAD_REQUEST)
+
         safe_name = os.path.basename(upload.name)
         path = default_storage.save(
             f"form_uploads/{lead.project_id}/{lead.id}/{field_id}/{safe_name}",
@@ -1674,7 +1708,15 @@ class LeadViewSet(viewsets.ModelViewSet):
         url = default_storage.url(path)
         if not url.startswith("http"):
             url = request.build_absolute_uri(url)
-        return Response({"url": url, "name": safe_name, "path": path})
+
+        # Mark documents pack as pending verification for Manager/TL/Admin
+        doc, _ = LeadDocument.objects.get_or_create(lead=lead)
+        if doc.verification_status != LeadDocument.VerificationStatus.PENDING or doc.verified_by_id:
+            doc.verification_status = LeadDocument.VerificationStatus.PENDING
+            doc.verified_by = None
+            doc.save(update_fields=["verification_status", "verified_by"])
+
+        return Response({"url": url, "name": safe_name, "path": path, "field_id": field_id})
 
     @action(detail=True, methods=["patch"])
     def verify_documents(self, request, pk=None):
@@ -1682,9 +1724,26 @@ class LeadViewSet(viewsets.ModelViewSet):
         if request.user.role not in (User.Role.ADMIN, User.Role.TL, User.Role.MANAGER):
             return Response({"detail": "Only TL/Manager/Admin can verify."}, status=status.HTTP_403_FORBIDDEN)
         doc, _ = LeadDocument.objects.get_or_create(lead=lead)
-        doc.verification_status = request.data.get("verification_status", doc.verification_status)
+        new_status = request.data.get("verification_status", doc.verification_status)
+        if new_status not in (
+            LeadDocument.VerificationStatus.PENDING,
+            LeadDocument.VerificationStatus.APPROVED,
+            LeadDocument.VerificationStatus.REJECTED,
+        ):
+            return Response({"detail": "Invalid verification status."}, status=status.HTTP_400_BAD_REQUEST)
+        doc.verification_status = new_status
         doc.verified_by = request.user
         doc.save()
+
+        # Notify BDM on approve/reject
+        if lead.bdm_id and lead.bdm_id != request.user.id:
+            label = "approved" if new_status == LeadDocument.VerificationStatus.APPROVED else "rejected"
+            if new_status in (LeadDocument.VerificationStatus.APPROVED, LeadDocument.VerificationStatus.REJECTED):
+                Notification.objects.create(
+                    user=lead.bdm,
+                    message=f"Documents {label} for {lead.merchant.name}",
+                    link=f"/leads?lead={lead.id}",
+                )
         return Response(LeadDocumentSerializer(doc, context={"request": request}).data)
 
     @action(detail=True, methods=["get"])
@@ -1789,19 +1848,62 @@ class LeadViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def form_submission(self, request, pk=None):
         lead = self.get_object()
-        form = CustomForm.objects.filter(project=lead.project, is_active=True).first()
-        if not form:
-            return Response({"detail": "No custom form for this project."}, status=status.HTTP_404_NOT_FOUND)
-        answers = request.data.get("answers", {})
-        errors = validate_form_answers(form.schema, answers)
+        form = getattr(lead.project, "custom_form", None)
+        if form is None:
+            form = CustomForm.objects.filter(project=lead.project, is_active=True).first()
+        if not form or not form.is_active:
+            return Response(
+                {"detail": "No active custom form for this project. Ask admin to publish the form."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        answers = request.data.get("answers", {}) or {}
+        schema = effective_form_schema(form)
+        errors = validate_form_answers(schema, answers)
         if errors:
             return Response({"detail": errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Drop collection answers if collection is disabled
+        if not form.enable_collection:
+            for f in form.schema or []:
+                if f.get("metric_role") == "collection" and f.get("field_id"):
+                    answers.pop(f["field_id"], None)
+
         lead.custom_data = answers
         lead.save(update_fields=["custom_data"])
         sub, _ = FormSubmission.objects.update_or_create(
             lead=lead, custom_form=form,
             defaults={"submitted_by": request.user, "answers": answers},
         )
+
+        # Any uploaded file answers → docs need Manager/TL/Admin verification
+        has_files = any(
+            f.get("type") == "file" and answers.get(f.get("field_id"))
+            for f in (form.schema or [])
+        )
+        if has_files:
+            doc, _ = LeadDocument.objects.get_or_create(lead=lead)
+            doc.verification_status = LeadDocument.VerificationStatus.PENDING
+            doc.verified_by = None
+            doc.save(update_fields=["verification_status", "verified_by"])
+            # Notify BDM's reporting chain + project admins
+            notify_ids = set(
+                User.objects.filter(role=User.Role.ADMIN, is_active_user=True).values_list("id", flat=True)[:10]
+            )
+            parent = getattr(lead.bdm, "reports_to", None)
+            hops = 0
+            while parent is not None and hops < 5:
+                notify_ids.add(parent.id)
+                parent = getattr(parent, "reports_to", None)
+                hops += 1
+            for uid in notify_ids:
+                if uid == request.user.id:
+                    continue
+                Notification.objects.create(
+                    user_id=uid,
+                    message=f"Documents uploaded for {lead.merchant.name} — verify & approve",
+                    link=f"/leads?lead={lead.id}",
+                )
+
         visit_id = request.data.get("visit_id")
         visit = None
         if visit_id:

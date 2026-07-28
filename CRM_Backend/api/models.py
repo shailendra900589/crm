@@ -78,6 +78,11 @@ class CustomForm(models.Model):
     title = models.CharField(max_length=200, default="Lead Form")
     schema = models.JSONField(default=list)
     is_active = models.BooleanField(default=True)
+    # When False, Amount Collected / collection metric fields are hidden from BDM fill + validation
+    enable_collection = models.BooleanField(
+        default=False,
+        help_text="Show Amount Collected / payment fields on this form for BDMs.",
+    )
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     updated_at = models.DateTimeField(auto_now=True)
 

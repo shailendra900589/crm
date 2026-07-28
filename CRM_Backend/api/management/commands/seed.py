@@ -13,15 +13,6 @@ DEFAULT_FORM = [
     {"field_id": "business_type", "label": "Business Type", "type": "dropdown", "required": True, "options": ["Retail", "Wholesale", "Manufacturer"]},
     {"field_id": "annual_revenue", "label": "Annual Revenue", "type": "number", "required": False},
     {
-        "field_id": "amount_collected",
-        "label": "Amount Collected",
-        "type": "currency",
-        "required": False,
-        "currency": "INR",
-        "metric_role": "collection",
-        "min": 0,
-    },
-    {
         "field_id": "pending_amount",
         "label": "Collection Pending Amount",
         "type": "currency",

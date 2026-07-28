@@ -231,6 +231,46 @@ def my_assigned_visits(user):
     return qs
 
 
+def effective_form_schema(form_or_schema, enable_collection=None):
+    """
+    Return schema used for fill/validation.
+    Collection (Amount Collected) fields stay hidden until enable_collection is on.
+    """
+    if hasattr(form_or_schema, "schema"):
+        schema = list(form_or_schema.schema or [])
+        if enable_collection is None:
+            enable_collection = bool(getattr(form_or_schema, "enable_collection", False))
+    else:
+        schema = list(form_or_schema or [])
+        if enable_collection is None:
+            enable_collection = False
+    if enable_collection:
+        return schema
+    return [f for f in schema if f.get("metric_role") != "collection"]
+
+
+def validate_single_file_field(field_def, filename):
+    """Validate one file upload without requiring other form answers."""
+    file_ext_map = {
+        "pdf": [".pdf"],
+        "excel": [".xls", ".xlsx"],
+        "word": [".doc", ".docx"],
+        "image": [".jpg", ".jpeg", ".png", ".webp"],
+        "csv": [".csv"],
+        "document": [".pdf", ".doc", ".docx", ".xls", ".xlsx"],
+    }
+    if not field_def or field_def.get("type") != "file":
+        return ["Invalid file field."]
+    accept_key = field_def.get("file_accept") or "any"
+    allowed = file_ext_map.get(accept_key)
+    if allowed and filename:
+        lower = str(filename).lower()
+        if not any(lower.endswith(ext) for ext in allowed):
+            label = field_def.get("label") or "File"
+            return [f"{label}: invalid file type for this field"]
+    return []
+
+
 def validate_form_answers(schema, answers):
     import re
 

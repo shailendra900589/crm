@@ -366,7 +366,16 @@ class CustomFormSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CustomForm
-        fields = ["id", "project", "project_name", "title", "schema", "is_active", "updated_at"]
+        fields = [
+            "id",
+            "project",
+            "project_name",
+            "title",
+            "schema",
+            "is_active",
+            "enable_collection",
+            "updated_at",
+        ]
 
 
 class FormSubmissionSerializer(serializers.ModelSerializer):

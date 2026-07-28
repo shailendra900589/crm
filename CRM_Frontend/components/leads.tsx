@@ -7,13 +7,14 @@ import { DynamicForm } from "@/components/dynamic-form";
 import { hasWizardSteps } from "@/lib/form-steps";
 import { LeadActivityTimeline } from "@/components/lead-activity";
 import { api, getProjectId, onProjectChange, LEAD_STATUSES, type CallOutcome, type CreateLeadData, type Lead, type UpdateLeadData } from "@/lib/api";
+import { schemaForFill } from "@/lib/form-fields";
 import { LogCallForm } from "@/components/log-call";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRightLeft, Calendar, Download, Eye, FileSpreadsheet, FileText, Filter, Pencil, Phone, PhoneCall, Plus, Search, Trash2, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 type ModalMode = "add" | "edit" | "followup" | "reassign" | "call" | null;
 
@@ -733,6 +734,21 @@ function LeadDetailModal({
   });
 
   const l = detail || lead;
+  const fillSchema = useMemo(
+    () => schemaForFill(customForm?.schema, customForm?.enable_collection),
+    [customForm?.schema, customForm?.enable_collection],
+  );
+  const formFileUploads = useMemo(() => {
+    const data = (l?.custom_data || {}) as Record<string, unknown>;
+    return (customForm?.schema || [])
+      .filter((f) => f.type === "file")
+      .map((f) => {
+        const raw = data[f.field_id];
+        const url = typeof raw === "string" ? raw : "";
+        return { field_id: f.field_id, label: f.label || f.field_id, url };
+      })
+      .filter((f) => !!f.url);
+  }, [customForm?.schema, l?.custom_data]);
 
   useEffect(() => {
     if (l?.custom_data) setFormData(l.custom_data as Record<string, unknown>);
@@ -863,7 +879,7 @@ function LeadDetailModal({
           {tab === "form" && customForm && (
             <div>
               <DynamicForm
-                schema={customForm.schema}
+                schema={fillSchema}
                 values={formData}
                 onChange={setFormData}
                 leadId={l.id}
@@ -871,7 +887,17 @@ function LeadDetailModal({
                 submitLabel={submitForm.isPending ? "Saving..." : "Save Form"}
                 submitting={submitForm.isPending}
               />
-              {!hasWizardSteps(customForm.schema) && (
+              {submitForm.isError && (
+                <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {(submitForm.error as Error)?.message || "Save failed"}
+                </div>
+              )}
+              {submitForm.isSuccess && (
+                <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  Form saved.
+                </div>
+              )}
+              {!hasWizardSteps(fillSchema) && (
                 <Button className="mt-4" onClick={() => submitForm.mutate()} disabled={submitForm.isPending}>
                   {submitForm.isPending ? "Saving..." : "Save Form"}
                 </Button>
@@ -887,6 +913,7 @@ function LeadDetailModal({
             <DocumentsPanel
               leadId={l.id}
               doc={doc}
+              formFiles={formFileUploads}
               canVerify={!!me && (me.role === "Admin" || me.role === "TL" || me.role === "Manager")}
             />
           )}

@@ -32,7 +32,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { formatINR } from "@/lib/form-fields";
+import { formatINR, schemaForFill } from "@/lib/form-fields";
 
 const COLORS = ["#7c3aed", "#2563eb", "#10b981", "#f59e0b", "#f43f5e"];
 const STATUS_LABELS: Record<string, string> = {
@@ -61,8 +61,9 @@ export function DashboardView() {
     queryFn: () => api.merchants(filters.project ? Number(filters.project) : undefined),
   });
   const { data: myLeads } = useQuery({
-    queryKey: ["leads", "workdesk"],
-    queryFn: () => api.leads({ page: 1 }),
+    queryKey: ["leads", "workdesk", filters.project],
+    queryFn: () => api.leads({ page: 1, project: filters.project ? Number(filters.project) : undefined }),
+    enabled: !!filters.project,
   });
 
   const [selectedLead, setSelectedLead] = useState<number | null>(null);
@@ -132,6 +133,10 @@ export function DashboardView() {
   };
 
   useEffect(() => {
+    setSelectedLead(null);
+  }, [filters.project]);
+
+  useEffect(() => {
     if (leads.length && !selectedLead) setSelectedLead(leads[0].id);
   }, [leads, selectedLead]);
 
@@ -181,6 +186,11 @@ export function DashboardView() {
       setVisitModalRemarks("");
     },
   });
+
+  const fillSchema = useMemo(
+    () => schemaForFill(data?.project_form?.schema, data?.project_form?.enable_collection),
+    [data?.project_form?.schema, data?.project_form?.enable_collection],
+  );
 
   const assignVisit = useMutation({
     mutationFn: () =>
@@ -442,7 +452,7 @@ export function DashboardView() {
                 <div className="px-4 py-4 sm:px-5 sm:py-5">
                   <SectionDivider label="Form Details" />
                   <DynamicForm
-                    schema={data.project_form.schema}
+                    schema={fillSchema}
                     values={formData}
                     onChange={setFormData}
                     leadId={selectedLead ?? undefined}
@@ -450,6 +460,17 @@ export function DashboardView() {
                     submitLabel={submitForm.isPending ? "Submitting…" : "Submit & Complete"}
                     submitting={submitForm.isPending}
                   />
+
+                  {(submitForm.isError || submitVisitModal.isError) && (
+                    <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+                      {(submitForm.error as Error)?.message || (submitVisitModal.error as Error)?.message || "Submit failed"}
+                    </div>
+                  )}
+                  {submitForm.isSuccess && (
+                    <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                      Form submitted successfully.
+                    </div>
+                  )}
 
                   <div className="mt-5 space-y-3 border-t border-slate-200 pt-4 dark:border-slate-700">
                     <FormLabel>Visit Remarks</FormLabel>
@@ -460,7 +481,7 @@ export function DashboardView() {
                       value={remarks}
                       onChange={(e) => setRemarks(e.target.value)}
                     />
-                    {!hasWizardSteps(data.project_form.schema) && (
+                    {!hasWizardSteps(fillSchema) && (
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       <Button
                         onClick={() => submitForm.mutate()}
@@ -668,7 +689,7 @@ export function DashboardView() {
                   <div className="px-6 py-6">
                     <SectionDivider label="Form Details" />
                     <DynamicForm
-                      schema={data.project_form.schema}
+                      schema={fillSchema}
                       values={visitModalFormData}
                       onChange={setVisitModalFormData}
                       leadId={activeVisit?.lead}
@@ -676,6 +697,11 @@ export function DashboardView() {
                       submitLabel={submitVisitModal.isPending ? "Submitting..." : "Submit & Complete"}
                       submitting={submitVisitModal.isPending}
                     />
+                    {submitVisitModal.isError && (
+                      <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                        {(submitVisitModal.error as Error)?.message || "Submit failed"}
+                      </div>
+                    )}
                   </div>
                   <div className="bg-slate-50/60 px-6 py-5">
                     <FormLabel>Visit Remarks</FormLabel>
@@ -693,7 +719,7 @@ export function DashboardView() {
               )}
             </div>
             <div className="flex flex-wrap gap-2 border-t border-slate-100 bg-white px-6 py-4">
-              {data.project_form && !hasWizardSteps(data.project_form.schema) && (
+              {data.project_form && !hasWizardSteps(fillSchema) && (
                 <Button
                   onClick={() => submitVisitModal.mutate()}
                   disabled={submitVisitModal.isPending}
