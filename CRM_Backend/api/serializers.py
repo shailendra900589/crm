@@ -1,7 +1,23 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import AuditLog, BulkUploadJob, CustomForm, FormSubmission, Lead, LeadDocument, LeadVisit, Merchant, Notification, Product, Project, SalesTarget, Team
+from .models import (
+    AuditLog,
+    BulkUploadJob,
+    CustomForm,
+    FormSubmission,
+    Lead,
+    LeadDocument,
+    LeadVisit,
+    Merchant,
+    Notification,
+    Organization,
+    Product,
+    Project,
+    SalesTarget,
+    Team,
+    VerificationWork,
+)
 from .permissions import get_descendant_ids
 
 User = get_user_model()
@@ -10,10 +26,24 @@ User = get_user_model()
 class ProjectSerializer(serializers.ModelSerializer):
     lead_count = serializers.IntegerField(read_only=True, required=False)
     product_count = serializers.SerializerMethodField()
+    organization_name = serializers.CharField(source="organization.name", read_only=True, allow_null=True)
 
     class Meta:
         model = Project
-        fields = ["id", "name", "slug", "description", "color", "is_active", "crm_pro_mobile_enabled", "lead_count", "product_count", "created_at"]
+        fields = [
+            "id",
+            "organization",
+            "organization_name",
+            "name",
+            "slug",
+            "description",
+            "color",
+            "is_active",
+            "crm_pro_mobile_enabled",
+            "lead_count",
+            "product_count",
+            "created_at",
+        ]
         read_only_fields = ["slug", "created_at"]
 
     def get_product_count(self, obj):
@@ -35,6 +65,7 @@ class UserSerializer(serializers.ModelSerializer):
     assigned_project_ids = serializers.PrimaryKeyRelatedField(
         source="assigned_projects", many=True, read_only=True
     )
+    organization_name = serializers.CharField(source="organization.name", read_only=True, allow_null=True)
 
     class Meta:
         model = User
@@ -42,6 +73,7 @@ class UserSerializer(serializers.ModelSerializer):
             "id", "username", "first_name", "last_name", "email", "role",
             "mobile_number", "reports_to", "reports_to_name", "is_active_user",
             "assigned_project_ids", "crm_pro_mobile_enabled",
+            "organization", "organization_name", "hrms_user_id", "can_edit_leads",
         ]
 
     def get_reports_to_name(self, obj):
@@ -60,18 +92,27 @@ class UserCreateSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "username", "password", "first_name", "last_name", "email", "role",
-            "mobile_number", "reports_to", "assigned_projects",
+            "mobile_number", "reports_to", "assigned_projects", "organization",
+            "can_edit_leads", "hrms_user_id",
         ]
 
     def validate_role(self, value):
         actor = self.context["request"].user
-        if actor.role != User.Role.ADMIN and value == User.Role.ADMIN:
+        if actor.role not in (User.Role.ADMIN, User.Role.SUPERADMIN) and value in (
+            User.Role.ADMIN,
+            User.Role.SUPERADMIN,
+        ):
             raise serializers.ValidationError("Cannot create Admin users.")
+        if value == User.Role.SUPERADMIN and actor.role != User.Role.SUPERADMIN:
+            raise serializers.ValidationError("Only Super Admin can create Super Admin.")
         return value
 
     def create(self, validated_data):
         projects = validated_data.pop("assigned_projects", [])
         password = validated_data.pop("password")
+        actor = self.context["request"].user
+        if "organization" not in validated_data and getattr(actor, "organization_id", None):
+            validated_data["organization"] = actor.organization
         user = User(**validated_data)
         user.set_password(password)
         user.save()
@@ -91,7 +132,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         fields = [
             "first_name", "last_name", "email", "role", "mobile_number",
             "reports_to", "is_active_user", "password", "assigned_projects",
-            "crm_pro_mobile_enabled",
+            "crm_pro_mobile_enabled", "organization", "can_edit_leads", "hrms_user_id",
         ]
 
     def update(self, instance, validated_data):
@@ -477,3 +518,134 @@ class SalesTargetSerializer(serializers.ModelSerializer):
         if value < 1 or value > 12:
             raise serializers.ValidationError("Month must be 1–12.")
         return value
+
+
+class OrganizationSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    approved_by_name = serializers.SerializerMethodField()
+    user_count = serializers.SerializerMethodField()
+    project_count = serializers.SerializerMethodField()
+    access_allowed = serializers.BooleanField(source="is_access_allowed", read_only=True)
+
+    class Meta:
+        model = Organization
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "email",
+            "phone",
+            "city",
+            "status",
+            "status_display",
+            "plan_label",
+            "trial_ends_at",
+            "payment_notes",
+            "hrms_connected",
+            "hrms_company_id",
+            "hrms_api_base_url",
+            "admin_name",
+            "is_public",
+            "created_at",
+            "approved_by",
+            "approved_by_name",
+            "approved_at",
+            "user_count",
+            "project_count",
+            "access_allowed",
+        ]
+        read_only_fields = ["slug", "created_at", "approved_by", "approved_at"]
+
+    def get_approved_by_name(self, obj):
+        if not obj.approved_by_id:
+            return None
+        return obj.approved_by.get_full_name() or obj.approved_by.username
+
+    def get_user_count(self, obj):
+        return obj.users.filter(is_active_user=True).count()
+
+    def get_project_count(self, obj):
+        return obj.projects.filter(is_active=True).count()
+
+
+class OrganizationWriteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = [
+            "name",
+            "email",
+            "phone",
+            "city",
+            "status",
+            "plan_label",
+            "trial_ends_at",
+            "payment_notes",
+            "hrms_connected",
+            "hrms_company_id",
+            "hrms_api_base_url",
+            "admin_name",
+            "is_public",
+        ]
+
+    def create(self, validated_data):
+        from django.utils.text import slugify
+
+        name = validated_data.get("name") or "Company"
+        base = slugify(name)[:40] or "company"
+        slug = base
+        n = 1
+        while Organization.objects.filter(slug=slug).exists():
+            n += 1
+            slug = f"{base}-{n}"
+        validated_data["slug"] = slug
+        return super().create(validated_data)
+
+
+class VerificationWorkSerializer(serializers.ModelSerializer):
+    lead_name = serializers.CharField(source="lead.merchant.name", read_only=True)
+    project_name = serializers.CharField(source="lead.project.name", read_only=True)
+    assigned_to_name = serializers.SerializerMethodField()
+    assigned_by_name = serializers.SerializerMethodField()
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    document_status = serializers.CharField(source="document.verification_status", read_only=True, allow_null=True)
+    merchant_city = serializers.CharField(source="lead.merchant.city", read_only=True)
+
+    class Meta:
+        model = VerificationWork
+        fields = [
+            "id",
+            "organization",
+            "lead",
+            "lead_name",
+            "project_name",
+            "merchant_city",
+            "form_submission",
+            "document",
+            "document_status",
+            "title",
+            "status",
+            "status_display",
+            "priority",
+            "assigned_to",
+            "assigned_to_name",
+            "assigned_by",
+            "assigned_by_name",
+            "due_date",
+            "assign_notes",
+            "completion_notes",
+            "allow_edit",
+            "completed_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["organization", "assigned_by", "completed_at", "created_at", "updated_at"]
+
+    def get_assigned_to_name(self, obj):
+        if not obj.assigned_to_id:
+            return None
+        return obj.assigned_to.get_full_name() or obj.assigned_to.username
+
+    def get_assigned_by_name(self, obj):
+        if not obj.assigned_by_id:
+            return None
+        return obj.assigned_by.get_full_name() or obj.assigned_by.username

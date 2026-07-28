@@ -1,8 +1,61 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
+
+
+class Organization(models.Model):
+    """Tenant / company that owns CRM projects and employees."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending approval"
+        TRIAL = "trial", "Trial"
+        ACTIVE = "active", "Active (paid)"
+        SUSPENDED = "suspended", "Suspended"
+        REJECTED = "rejected", "Rejected"
+
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(unique=True)
+    email = models.EmailField()
+    phone = models.CharField(max_length=20, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+    plan_label = models.CharField(max_length=120, blank=True, default="Trial")
+    trial_ends_at = models.DateTimeField(null=True, blank=True)
+    payment_notes = models.TextField(blank=True, help_text="Super Admin payment / commercial notes")
+    hrms_connected = models.BooleanField(default=False)
+    hrms_company_id = models.CharField(max_length=64, blank=True)
+    hrms_api_base_url = models.URLField(blank=True, default="https://hrms.trackbook.co")
+    admin_name = models.CharField(max_length=120, blank=True)
+    is_public = models.BooleanField(default=False, help_text="Published by Super Admin for signup visibility")
+    created_at = models.DateTimeField(auto_now_add=True)
+    approved_by = models.ForeignKey(
+        "User", null=True, blank=True, on_delete=models.SET_NULL, related_name="orgs_approved"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def is_access_allowed(self) -> bool:
+        if self.status == self.Status.REJECTED:
+            return False
+        if self.status == self.Status.SUSPENDED:
+            return False
+        if self.status == self.Status.PENDING:
+            return False
+        if self.status == self.Status.TRIAL and self.trial_ends_at and self.trial_ends_at < timezone.now():
+            return False
+        return self.status in (self.Status.TRIAL, self.Status.ACTIVE)
 
 
 class Project(models.Model):
+    organization = models.ForeignKey(
+        Organization, null=True, blank=True, on_delete=models.CASCADE, related_name="projects"
+    )
     name = models.CharField(max_length=100)
     slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
@@ -42,17 +95,27 @@ class Product(models.Model):
 
 class User(AbstractUser):
     class Role(models.TextChoices):
+        SUPERADMIN = "SuperAdmin", "Super Admin"
         ADMIN = "Admin", "Admin"
         MANAGER = "Manager", "Manager"
         TL = "TL", "Team Lead"
         BDM = "BDM", "BDM"
+        OPS = "Ops", "Office Ops"
 
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.BDM)
+    organization = models.ForeignKey(
+        Organization, null=True, blank=True, on_delete=models.SET_NULL, related_name="users"
+    )
     reports_to = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.SET_NULL, related_name="team"
     )
     mobile_number = models.CharField(max_length=15, blank=True)
     is_active_user = models.BooleanField(default=True)
+    hrms_user_id = models.CharField(max_length=64, blank=True, db_index=True)
+    can_edit_leads = models.BooleanField(
+        default=True,
+        help_text="When True, user may edit lead/form data (subject to hierarchy).",
+    )
     crm_pro_mobile_enabled = models.BooleanField(
         null=True,
         blank=True,
@@ -78,7 +141,6 @@ class CustomForm(models.Model):
     title = models.CharField(max_length=200, default="Lead Form")
     schema = models.JSONField(default=list)
     is_active = models.BooleanField(default=True)
-    # When False, Amount Collected / collection metric fields are hidden from BDM fill + validation
     enable_collection = models.BooleanField(
         default=False,
         help_text="Show Amount Collected / payment fields on this form for BDMs.",
@@ -173,6 +235,62 @@ class LeadDocument(models.Model):
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
 
+class VerificationWork(models.Model):
+    """
+    Office verification task:
+    BDM submits form/docs → Manager/TL assigns Ops → Ops completes → supervisors see on dashboard.
+    """
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open (unassigned)"
+        ASSIGNED = "assigned", "Assigned"
+        IN_PROGRESS = "in_progress", "In progress"
+        DONE = "done", "Completed"
+        REJECTED = "rejected", "Rejected"
+        REOPENED = "reopened", "Reopened"
+
+    class Priority(models.TextChoices):
+        NORMAL = "normal", "Normal"
+        HIGH = "high", "High"
+        URGENT = "urgent", "Urgent"
+
+    organization = models.ForeignKey(
+        Organization, null=True, blank=True, on_delete=models.CASCADE, related_name="verification_works"
+    )
+    lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="verification_works")
+    form_submission = models.ForeignKey(
+        FormSubmission, null=True, blank=True, on_delete=models.SET_NULL, related_name="verification_works"
+    )
+    document = models.ForeignKey(
+        LeadDocument, null=True, blank=True, on_delete=models.SET_NULL, related_name="verification_works"
+    )
+    title = models.CharField(max_length=200, default="Verify documents")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN, db_index=True)
+    priority = models.CharField(max_length=20, choices=Priority.choices, default=Priority.NORMAL)
+    assigned_to = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name="verification_assigned"
+    )
+    assigned_by = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name="verification_created"
+    )
+    due_date = models.DateField(null=True, blank=True)
+    assign_notes = models.TextField(blank=True)
+    completion_notes = models.TextField(blank=True)
+    allow_edit = models.BooleanField(
+        default=True,
+        help_text="Assignee may edit lead form answers while working this task.",
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.title} · {self.lead_id} · {self.status}"
+
+
 class Notification(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
     message = models.CharField(max_length=500)
@@ -238,6 +356,7 @@ class AuditLog(models.Model):
 
 class SalesTarget(models.Model):
     """Monthly confirmed-order (and optional lead) targets per BDM."""
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sales_targets")
     project = models.ForeignKey(
         Project, null=True, blank=True, on_delete=models.CASCADE, related_name="sales_targets"
@@ -261,7 +380,7 @@ class SalesTarget(models.Model):
 
 
 class RolePagePermission(models.Model):
-    """Admin-controlled page access for Manager / TL / BDM."""
+    """Admin-controlled page access for Manager / TL / BDM / Ops."""
 
     role = models.CharField(max_length=20, choices=User.Role.choices, db_index=True)
     page_key = models.CharField(max_length=64, db_index=True)

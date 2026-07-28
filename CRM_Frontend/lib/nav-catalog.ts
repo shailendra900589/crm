@@ -2,8 +2,10 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3,
   BellRing,
+  Building2,
   CalendarClock,
   CalendarDays,
+  ClipboardCheck,
   ClipboardList,
   Columns3,
   Copy,
@@ -19,9 +21,10 @@ import {
   Users,
 } from "lucide-react";
 
-export type AppRole = "Admin" | "Manager" | "TL" | "BDM";
+export type AppRole = "SuperAdmin" | "Admin" | "Manager" | "TL" | "BDM" | "Ops";
 export type FieldPageKey =
   | "dashboard"
+  | "verification"
   | "leads"
   | "pipeline"
   | "duplicates"
@@ -43,29 +46,37 @@ export type NavEntry = {
 /** Admin console — not toggleable by permissions matrix */
 export const ADMIN_NAV: NavEntry[] = [
   { pageKey: "admin", href: "/admin", icon: Shield, labels: { default: "Org Dashboard" } },
+  { pageKey: "admin.organizations", href: "/admin/organizations", icon: Building2, labels: { default: "Companies", SuperAdmin: "All Companies" } },
   { pageKey: "admin.projects", href: "/admin/projects", icon: FolderKanban, labels: { default: "Projects" } },
   { pageKey: "admin.users", href: "/admin/users", icon: UserCog, labels: { default: "Users" } },
   { pageKey: "admin.forms", href: "/admin/forms", icon: FileText, labels: { default: "Form Builder" } },
   { pageKey: "admin.permissions", href: "/admin/permissions", icon: KeyRound, labels: { default: "Permissions" } },
   { pageKey: "admin.audit", href: "/admin/audit", icon: ClipboardList, labels: { default: "Audit Log" } },
+  { pageKey: "verification", href: "/verification", icon: ClipboardCheck, labels: { default: "Verification" } },
   { pageKey: "team", href: "/team", icon: Users, labels: { default: "Teams" } },
   { pageKey: "reports", href: "/reports", icon: BarChart3, labels: { default: "Org Reports" } },
   { pageKey: "profile", href: "/profile", icon: UserRound, labels: { default: "Profile" } },
 ];
 
-/** Field pages — Admin toggles Manager / TL / BDM access */
+/** Field pages — Admin toggles Manager / TL / BDM / Ops access */
 export const FIELD_NAV: NavEntry[] = [
   {
     pageKey: "dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
-    labels: { default: "Dashboard", Manager: "Team Hub", TL: "TL Desk", BDM: "My Workdesk" },
+    labels: { default: "Dashboard", Manager: "Team Hub", TL: "TL Desk", BDM: "My Workdesk", Ops: "Ops Desk" },
+  },
+  {
+    pageKey: "verification",
+    href: "/verification",
+    icon: ClipboardCheck,
+    labels: { default: "Verification", Ops: "My Queue", Manager: "Assign Verify", TL: "Assign Verify" },
   },
   {
     pageKey: "leads",
     href: "/leads",
     icon: Target,
-    labels: { default: "Leads", Manager: "Team Leads", BDM: "My Leads" },
+    labels: { default: "Leads", Manager: "Team Leads", BDM: "My Leads", Ops: "Lead Docs" },
   },
   { pageKey: "pipeline", href: "/pipeline", icon: Columns3, labels: { default: "Pipeline" } },
   { pageKey: "duplicates", href: "/duplicates", icon: Copy, labels: { default: "Duplicates" } },
@@ -103,6 +114,7 @@ export function navLabel(entry: NavEntry, role: AppRole) {
 }
 
 export function hrefToPageKey(pathname: string): string | null {
+  if (pathname.startsWith("/admin/organizations")) return "admin.organizations";
   if (pathname.startsWith("/admin/projects")) return "admin.projects";
   if (pathname.startsWith("/admin/users")) return "admin.users";
   if (pathname.startsWith("/admin/forms")) return "admin.forms";
@@ -114,7 +126,9 @@ export function hrefToPageKey(pathname: string): string | null {
 }
 
 export function homeHrefForUser(role: AppRole, allowedPages?: string[] | null) {
+  if (role === "SuperAdmin") return "/admin/organizations";
   if (role === "Admin") return "/admin";
+  if (role === "Ops") return "/verification";
   const pages = allowedPages || [];
   if (pages.includes("dashboard")) return "/dashboard";
   const preferred = FIELD_NAV.find((n) => n.pageKey !== "profile" && pages.includes(n.pageKey));
@@ -122,7 +136,7 @@ export function homeHrefForUser(role: AppRole, allowedPages?: string[] | null) {
 }
 
 export function canAccessPage(role: AppRole, pageKey: string, allowedPages?: string[] | null) {
-  if (role === "Admin") {
+  if (role === "Admin" || role === "SuperAdmin") {
     return ADMIN_NAV.some((n) => n.pageKey === pageKey) || FIELD_NAV.some((n) => n.pageKey === pageKey);
   }
   if (!allowedPages) return false;

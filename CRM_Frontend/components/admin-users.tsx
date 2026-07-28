@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Search, Shield, UserCog, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const ROLES: CrmUser["role"][] = ["Admin", "Manager", "TL", "BDM"];
+const ROLES: CrmUser["role"][] = ["Admin", "Manager", "TL", "BDM", "Ops"];
 
 const emptyCreate = (): CreateUserData => ({
   username: "",
@@ -464,6 +464,8 @@ function RoleBadge({ role }: { role: string }) {
     Manager: "bg-indigo-100 text-indigo-700",
     TL: "bg-blue-100 text-blue-700",
     BDM: "bg-slate-100 text-slate-700",
+    Ops: "bg-cyan-100 text-cyan-800",
+    SuperAdmin: "bg-violet-100 text-violet-800",
   };
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold", colors[role] || "bg-slate-100")}>

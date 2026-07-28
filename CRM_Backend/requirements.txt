@@ -14,3 +14,4 @@ openpyxl>=3.1
 fpdf2>=2.8
 psycopg2-binary>=2.9
 whitenoise>=6.6
+requests>=2.31

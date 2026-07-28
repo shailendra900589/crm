@@ -29,6 +29,7 @@ from .views import (
     UserViewSet,
     VisitViewSet,
 )
+from .workflow_views import OrganizationViewSet, RegisterOrganizationView, VerificationWorkViewSet
 
 router = DefaultRouter()
 router.register("projects", ProjectViewSet)
@@ -40,6 +41,8 @@ router.register("users", UserViewSet)
 router.register("visits", VisitViewSet)
 router.register("notifications", NotificationViewSet)
 router.register("sales-targets", SalesTargetViewSet)
+router.register("organizations", OrganizationViewSet)
+router.register("verification-works", VerificationWorkViewSet, basename="verification-works")
 
 urlpatterns = [
     path("health/", HealthView.as_view()),
@@ -58,6 +61,7 @@ urlpatterns = [
     path("admin/managers/", AdminManagersView.as_view()),
     path("admin/managers/<int:manager_id>/dashboard/", ManagerDrilldownView.as_view()),
     path("admin/page-permissions/", AdminPagePermissionsView.as_view()),
+    path("public/register-organization/", RegisterOrganizationView.as_view()),
     path("bulk-jobs/<int:job_id>/", BulkJobView.as_view()),
     path("", include(router.urls)),
 ]

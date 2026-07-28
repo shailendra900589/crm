@@ -40,6 +40,19 @@ class Command(BaseCommand):
         admin.set_password("password123")
         admin.save()
 
+        superadmin, _ = User.objects.get_or_create(
+            username="superadmin",
+            defaults={"role": User.Role.SUPERADMIN, "first_name": "Super", "last_name": "Admin", "email": "superadmin@crm.local"},
+        )
+        superadmin.role = User.Role.SUPERADMIN
+        superadmin.is_active = True
+        superadmin.is_active_user = True
+        superadmin.is_staff = True
+        superadmin.is_superuser = True
+        superadmin.organization = None
+        superadmin.set_password("password123")
+        superadmin.save()
+
         manager, _ = User.objects.get_or_create(
             username="manager",
             defaults={"role": User.Role.MANAGER, "first_name": "Raj", "reports_to": admin, "email": "manager@crm.local"},

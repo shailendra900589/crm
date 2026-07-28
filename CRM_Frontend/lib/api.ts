@@ -190,6 +190,52 @@ export const api = {
   saveCustomForm: (projectId: number, data: Partial<CustomForm>) =>
     request<CustomForm>(`/api/projects/${projectId}/custom-form/`, { method: "PUT", body: JSON.stringify(data) }),
 
+  registerOrganization: (data: Record<string, unknown>) =>
+    request<{ detail: string; organization: Organization }>(`/api/public/register-organization/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  organizations: () => requestList<Organization>(`/api/organizations/`),
+  organization: (id: number) => request<Organization>(`/api/organizations/${id}/`),
+  approveOrganization: (id: number, data: Record<string, unknown>) =>
+    request<Organization>(`/api/organizations/${id}/approve/`, { method: "POST", body: JSON.stringify(data) }),
+  rejectOrganization: (id: number, data?: Record<string, unknown>) =>
+    request<Organization>(`/api/organizations/${id}/reject/`, { method: "POST", body: JSON.stringify(data || {}) }),
+  setOrganizationPayment: (id: number, data: Record<string, unknown>) =>
+    request<Organization>(`/api/organizations/${id}/set_payment/`, { method: "POST", body: JSON.stringify(data) }),
+  syncHrmsEmployees: (id: number, data: { hrms_token: string; force?: boolean }) =>
+    request<{ created: number; updated: number; fetched: number; errors: string[] }>(
+      `/api/organizations/${id}/sync-hrms-employees/`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+
+  verificationWorks: (opts?: { status?: string; mine?: boolean; open?: boolean }) =>
+    requestList<VerificationWork>(`/api/verification-works/${buildQuery({
+      status: opts?.status,
+      mine: opts?.mine ? "1" : undefined,
+      open: opts?.open ? "1" : undefined,
+    })}`),
+  verificationSummary: () => request<VerificationSummary>(`/api/verification-works/summary/`),
+  verificationAssignees: () =>
+    request<{ ops: { id: number; username: string; first_name: string; last_name: string; role: string }[]; team: { id: number; username: string; first_name: string; last_name: string; role: string }[] }>(
+      `/api/verification-works/assignees/`,
+    ),
+  assignVerification: (id: number, data: { assigned_to: number; due_date?: string; assign_notes?: string; allow_edit?: boolean; priority?: string }) =>
+    request<VerificationWork>(`/api/verification-works/${id}/assign/`, { method: "POST", body: JSON.stringify(data) }),
+  startVerification: (id: number) =>
+    request<VerificationWork>(`/api/verification-works/${id}/start/`, { method: "POST", body: "{}" }),
+  completeVerification: (id: number, data?: { completion_notes?: string; approve_documents?: boolean }) =>
+    request<VerificationWork>(`/api/verification-works/${id}/complete/`, { method: "POST", body: JSON.stringify(data || {}) }),
+  rejectVerification: (id: number, data?: { completion_notes?: string }) =>
+    request<VerificationWork>(`/api/verification-works/${id}/reject/`, { method: "POST", body: JSON.stringify(data || {}) }),
+  reopenVerification: (id: number) =>
+    request<VerificationWork>(`/api/verification-works/${id}/reopen/`, { method: "POST", body: "{}" }),
+  saveVerificationAnswers: (id: number, answers: Record<string, unknown>) =>
+    request<{ detail: string; custom_data: Record<string, unknown> }>(`/api/verification-works/${id}/save-answers/`, {
+      method: "POST",
+      body: JSON.stringify({ answers }),
+    }),
+
   dashboard: (filters?: DashboardFilters) =>
     request<DashboardStats>(`/api/dashboard/${buildQuery({
       // Always scope to shell project when filter project is empty (hierarchy users)
@@ -736,7 +782,14 @@ export type MerchantItem = {
 };
 export type User = {
   id: number; username: string; first_name: string; last_name: string;
-  role: "Admin" | "BDM" | "TL" | "Manager"; mobile_number: string;
+  role: "SuperAdmin" | "Admin" | "BDM" | "TL" | "Manager" | "Ops";
+  mobile_number: string;
+  organization?: number | null;
+  organization_name?: string | null;
+  can_edit_leads?: boolean;
+  hrms_user_id?: string;
+  is_superadmin?: boolean;
+  organization_detail?: Organization | null;
 };
 export type LeadDocument = {
   id: number;
@@ -803,11 +856,73 @@ export type DashboardStats = {
   money_metrics?: MoneyMetrics;
   project_form: CustomForm | null;
   forms_filled_today: number;
+  verification_summary?: VerificationSummary;
   next_visit: LeadVisit | null;
   upcoming_visits: LeadVisit[];
   recent_submissions: FormSubmission[];
   revisit_leads: RevisitLead[];
   team_form_activity: FormSubmission[];
+};
+
+export type Organization = {
+  id: number;
+  name: string;
+  slug: string;
+  email: string;
+  phone?: string;
+  city?: string;
+  status: "pending" | "trial" | "active" | "suspended" | "rejected";
+  status_display?: string;
+  plan_label?: string;
+  trial_ends_at?: string | null;
+  payment_notes?: string;
+  hrms_connected?: boolean;
+  hrms_company_id?: string;
+  hrms_api_base_url?: string;
+  admin_name?: string;
+  is_public?: boolean;
+  created_at?: string;
+  approved_at?: string | null;
+  approved_by_name?: string | null;
+  user_count?: number;
+  project_count?: number;
+  access_allowed?: boolean;
+};
+
+export type VerificationWork = {
+  id: number;
+  organization?: number | null;
+  lead: number;
+  lead_name: string;
+  project_name?: string;
+  merchant_city?: string;
+  form_submission?: number | null;
+  document?: number | null;
+  document_status?: string | null;
+  title: string;
+  status: "open" | "assigned" | "in_progress" | "done" | "rejected" | "reopened";
+  status_display?: string;
+  priority: "normal" | "high" | "urgent";
+  assigned_to?: number | null;
+  assigned_to_name?: string | null;
+  assigned_by?: number | null;
+  assigned_by_name?: string | null;
+  due_date?: string | null;
+  assign_notes?: string;
+  completion_notes?: string;
+  allow_edit?: boolean;
+  completed_at?: string | null;
+  created_at: string;
+  updated_at?: string;
+};
+
+export type VerificationSummary = {
+  open: number;
+  assigned: number;
+  in_progress: number;
+  done: number;
+  rejected?: number;
+  mine: number;
 };
 export type AdminDashboardStats = {
   total_projects: number; active_projects: number; total_companies: number; total_products: number;

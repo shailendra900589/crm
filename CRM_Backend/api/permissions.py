@@ -6,8 +6,20 @@ from django.db.models import Q
 User = get_user_model()
 
 
+def is_superadmin(user):
+    return getattr(user, "role", None) == User.Role.SUPERADMIN
+
+
 def is_admin(user):
+    return user.role in (User.Role.ADMIN, User.Role.SUPERADMIN)
+
+
+def is_company_admin(user):
     return user.role == User.Role.ADMIN
+
+
+def is_ops(user):
+    return user.role == User.Role.OPS
 
 
 def is_manager(user):
@@ -15,7 +27,57 @@ def is_manager(user):
 
 
 def is_manager_or_admin(user):
-    return user.role in (User.Role.ADMIN, User.Role.MANAGER, User.Role.TL)
+    return user.role in (User.Role.ADMIN, User.Role.SUPERADMIN, User.Role.MANAGER, User.Role.TL)
+
+
+def can_assign_verification(user):
+    return user.role in (User.Role.ADMIN, User.Role.SUPERADMIN, User.Role.MANAGER, User.Role.TL)
+
+
+def can_edit_lead_data(user, lead=None):
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if is_superadmin(user) or is_company_admin(user):
+        return True
+    if not getattr(user, "can_edit_leads", True):
+        return False
+    if user.role in (User.Role.MANAGER, User.Role.TL, User.Role.BDM, User.Role.OPS):
+        return True
+    return False
+
+
+def verification_works_for_user(user):
+    from django.db.models import Q
+
+    from .models import VerificationWork
+
+    qs = VerificationWork.objects.select_related(
+        "lead",
+        "lead__merchant",
+        "lead__project",
+        "assigned_to",
+        "assigned_by",
+        "document",
+        "form_submission",
+    )
+    if is_superadmin(user):
+        return qs
+    if is_company_admin(user):
+        if user.organization_id:
+            return qs.filter(organization_id=user.organization_id)
+        return qs.filter(lead__project_id__in=project_ids_for_user(user))
+    if user.role in (User.Role.MANAGER, User.Role.TL):
+        ids = get_descendant_ids(user)
+        ids.add(user.id)
+        pids = project_ids_for_user(user)
+        return qs.filter(
+            Q(assigned_to_id__in=ids)
+            | Q(assigned_by=user)
+            | Q(lead__bdm_id__in=ids)
+            | Q(status__in=["open", "reopened"], lead__project_id__in=pids)
+        ).distinct()
+    # Ops (and BDM if assigned) — only own queue
+    return qs.filter(assigned_to=user)
 
 
 def get_descendant_ids(user):
@@ -54,7 +116,7 @@ def project_ids_for_user(user):
     """
     if not user or not getattr(user, "is_authenticated", False):
         return set()
-    if user.role == User.Role.ADMIN:
+    if is_admin(user):
         return None
 
     ids = set(_direct_project_ids(user))
@@ -64,7 +126,7 @@ def project_ids_for_user(user):
     seen = {user.id}
     while ancestor and ancestor.id not in seen:
         seen.add(ancestor.id)
-        if ancestor.role in (User.Role.MANAGER, User.Role.TL, User.Role.ADMIN):
+        if ancestor.role in (User.Role.MANAGER, User.Role.TL, User.Role.ADMIN, User.Role.SUPERADMIN):
             ids |= _direct_project_ids(ancestor)
         ancestor = getattr(ancestor, "reports_to", None)
 
@@ -75,7 +137,7 @@ def projects_for_user(user):
     """Project queryset visible to the user."""
     from .models import Project
 
-    if user.role == User.Role.ADMIN:
+    if is_admin(user):
         return Project.objects.all()
     ids = project_ids_for_user(user)
     if not ids:
@@ -94,7 +156,7 @@ def user_can_access_project(user, project_id):
 
 def users_for_user(user):
     """Users visible in hierarchy for listing/management."""
-    if user.role == User.Role.ADMIN:
+    if is_admin(user):
         return User.objects.filter(is_active_user=True)
     if user.role == User.Role.MANAGER:
         descendants = get_descendant_ids(user)
@@ -108,7 +170,7 @@ def users_for_user(user):
 def leads_for_user(user):
     from .models import Lead
 
-    if user.role == User.Role.ADMIN:
+    if is_admin(user):
         return Lead.objects.all()
 
     if user.role == User.Role.MANAGER:
@@ -132,7 +194,7 @@ def leads_for_user(user):
 def teams_for_user(user):
     from .models import Team
 
-    if user.role == User.Role.ADMIN:
+    if is_admin(user):
         return Team.objects.all()
     if user.role == User.Role.MANAGER:
         return Team.objects.filter(manager=user)
@@ -146,7 +208,7 @@ def can_manage_team(user):
 
 
 def can_manage_user(actor, target):
-    if actor.role == User.Role.ADMIN:
+    if is_admin(actor):
         return True
     if actor.role == User.Role.MANAGER:
         return target.id in get_descendant_ids(actor) or target.reports_to_id == actor.id
@@ -185,7 +247,7 @@ def can_reassign_to(actor, target):
         return False
     if target.role not in (User.Role.BDM, User.Role.TL, User.Role.MANAGER):
         return False
-    if actor.role == User.Role.ADMIN:
+    if is_admin(actor):
         return True
     if target.id == actor.id:
         return True
@@ -200,7 +262,7 @@ def visits_for_user(user):
     from .models import LeadVisit
 
     qs = LeadVisit.objects.select_related("lead", "assigned_to", "assigned_by", "lead__merchant")
-    if user.role == User.Role.ADMIN:
+    if is_admin(user):
         return qs
     if user.role == User.Role.BDM:
         qs = qs.filter(assigned_to=user)
@@ -491,7 +553,7 @@ def user_has_crm_pro_mobile_access(user) -> bool:
         return False
     if not getattr(user, "is_active_user", True) or not user.is_active:
         return False
-    if user.role == User.Role.ADMIN:
+    if is_admin(user):
         return True
     explicit = getattr(user, "crm_pro_mobile_enabled", None)
     if explicit is False:

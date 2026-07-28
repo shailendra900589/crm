@@ -26,6 +26,7 @@ import {
   TrendingUp,
   UserPlus,
   Users,
+  ClipboardCheck,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -312,6 +313,7 @@ export function DashboardView() {
           <MetricCard label="Companies" value={data.total_companies ?? 0} icon={Factory} variant="blue" accent="text-blue-700" pulse={pulse} />
           <MetricCard label="Products" value={data.total_products ?? 0} icon={FileText} variant="violet" accent="text-violet-700" pulse={pulse} />
           <MetricCard label="Forms Today" value={data.forms_filled_today} icon={FileText} variant="violet" accent="text-violet-700" pulse={pulse} />
+          <MetricCard label="Verify open" value={data.verification_summary?.open ?? 0} icon={ClipboardCheck} variant="amber" accent="text-amber-700" pulse={pulse} hint="Docs awaiting assign / complete" />
           <MetricCard label="Conversion" value={`${data.conversion_rate}%`} icon={TrendingUp} variant="emerald" accent="text-emerald-700" pulse={pulse} />
         </div>
         {data.money_metrics?.has_money && (

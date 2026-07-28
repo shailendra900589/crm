@@ -111,7 +111,13 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-4 text-center text-xs text-slate-400">
-          Demo: admin / manager / tl / bdm — password123
+          Demo: superadmin / admin / manager / tl / bdm — password123
+        </p>
+        <p className="mt-2 text-center text-xs text-slate-500">
+          New company?{" "}
+          <a href="/register" className="font-semibold text-blue-600 hover:underline dark:text-blue-300">
+            Register here
+          </a>
         </p>
       </Card>
     </div>

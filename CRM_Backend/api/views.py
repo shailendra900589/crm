@@ -138,6 +138,7 @@ class MeView(APIView):
     def get(self, request):
         from .page_access import allowed_pages_for_user
         from .permissions import user_has_crm_pro_mobile_access
+        from .serializers import OrganizationSerializer
 
         data = UserSerializer(request.user).data
         data["allowed_pages"] = allowed_pages_for_user(request.user)
@@ -146,6 +147,9 @@ class MeView(APIView):
         data["crm_pro_mobile_reason"] = None if allowed else (
             "CRM Pro mobile is not enabled for your account or project. Ask your Admin."
         )
+        org = getattr(request.user, "organization", None)
+        data["organization_detail"] = OrganizationSerializer(org).data if org else None
+        data["is_superadmin"] = request.user.role == User.Role.SUPERADMIN
         return Response(data)
 
     def patch(self, request):
@@ -444,6 +448,21 @@ class ProductViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
+def _verification_summary(user):
+    from django.db.models import Count, Q
+
+    from .permissions import verification_works_for_user
+
+    qs = verification_works_for_user(user)
+    return qs.aggregate(
+        open=Count("id", filter=Q(status__in=["open", "reopened"])),
+        assigned=Count("id", filter=Q(status="assigned")),
+        in_progress=Count("id", filter=Q(status="in_progress")),
+        done=Count("id", filter=Q(status="done")),
+        mine=Count("id", filter=Q(assigned_to=user, status__in=["assigned", "in_progress", "reopened"])),
+    )
+
+
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -612,6 +631,7 @@ class DashboardView(APIView):
                 else None
             ),
             "forms_filled_today": sub_qs.filter(submitted_at__date=today).count(),
+            "verification_summary": _verification_summary(user),
             "next_visit": LeadVisitSerializer(next_visit).data if next_visit else None,
             "upcoming_visits": LeadVisitSerializer(upcoming, many=True).data,
             "recent_submissions": FormSubmissionSerializer(recent, many=True).data,
@@ -635,6 +655,7 @@ class DashboardView(APIView):
         return {
             "project_form": None,
             "forms_filled_today": 0,
+            "verification_summary": {"open": 0, "assigned": 0, "in_progress": 0, "done": 0, "mine": 0},
             "next_visit": None,
             "upcoming_visits": [],
             "recent_submissions": [],
@@ -1875,7 +1896,7 @@ class LeadViewSet(viewsets.ModelViewSet):
             defaults={"submitted_by": request.user, "answers": answers},
         )
 
-        # Any uploaded file answers → docs need Manager/TL/Admin verification
+        # Any uploaded file answers → docs need verification assignment
         has_files = any(
             f.get("type") == "file" and answers.get(f.get("field_id"))
             for f in (form.schema or [])
@@ -1885,7 +1906,10 @@ class LeadViewSet(viewsets.ModelViewSet):
             doc.verification_status = LeadDocument.VerificationStatus.PENDING
             doc.verified_by = None
             doc.save(update_fields=["verification_status", "verified_by"])
-            # Notify BDM's reporting chain + project admins
+            from .workflow_views import ensure_verification_work_for_submission
+
+            work = ensure_verification_work_for_submission(lead, sub, actor=request.user)
+            # Notify BDM's reporting chain + project admins to assign Ops
             notify_ids = set(
                 User.objects.filter(role=User.Role.ADMIN, is_active_user=True).values_list("id", flat=True)[:10]
             )
@@ -1900,8 +1924,8 @@ class LeadViewSet(viewsets.ModelViewSet):
                     continue
                 Notification.objects.create(
                     user_id=uid,
-                    message=f"Documents uploaded for {lead.merchant.name} — verify & approve",
-                    link=f"/leads?lead={lead.id}",
+                    message=f"Documents ready for verification: {lead.merchant.name} — assign office Ops",
+                    link=f"/verification?work={work.id}",
                 )
 
         visit_id = request.data.get("visit_id")

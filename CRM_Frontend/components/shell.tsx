@@ -40,6 +40,14 @@ const ROLE_THEME: Record<
     badge: string;
   }
 > = {
+  SuperAdmin: {
+    brand: "Super Admin",
+    eyebrow: "Platform",
+    sidebarFrom: "from-violet-800 to-slate-950",
+    active: "bg-violet-50 text-violet-900",
+    activeDark: "dark:bg-violet-950/50 dark:text-violet-200",
+    badge: "bg-violet-600 text-white",
+  },
   Admin: {
     brand: "Admin Console",
     eyebrow: "Organization",
@@ -72,6 +80,14 @@ const ROLE_THEME: Record<
     activeDark: "dark:bg-blue-950/60 dark:text-blue-300",
     badge: "bg-blue-600 text-white",
   },
+  Ops: {
+    brand: "Office Ops",
+    eyebrow: "Verification",
+    sidebarFrom: "from-cyan-700 to-slate-900",
+    active: "bg-cyan-50 text-cyan-900",
+    activeDark: "dark:bg-cyan-950/40 dark:text-cyan-200",
+    badge: "bg-cyan-600 text-white",
+  },
 };
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -95,12 +111,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [isError, router]);
 
   useEffect(() => {
-    if (user?.role === "Admin" && pathname === "/dashboard") router.replace("/admin");
+    if ((user?.role === "Admin" || user?.role === "SuperAdmin") && pathname === "/dashboard") {
+      router.replace(user.role === "SuperAdmin" ? "/admin/organizations" : "/admin");
+    }
   }, [user, pathname, router]);
 
   useEffect(() => {
-    if (user && pathname.startsWith("/admin") && user.role !== "Admin") {
-      router.replace("/dashboard");
+    if (user && pathname.startsWith("/admin") && user.role !== "Admin" && user.role !== "SuperAdmin") {
+      router.replace(homeHrefForUser(user.role as Role, user.allowed_pages));
     }
   }, [user, pathname, router]);
 
@@ -135,7 +153,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const navItems = useMemo(() => {
     if (!user) return [];
     const role = user.role as Role;
-    const source = role === "Admin" ? ADMIN_NAV : FIELD_NAV;
+    const source = role === "Admin" || role === "SuperAdmin" ? ADMIN_NAV : FIELD_NAV;
     return source
       .filter((n) => canAccessPage(role, n.pageKey, user.allowed_pages))
       .map((n) => ({
@@ -185,8 +203,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   };
 
   /** Admin uses org filters on the dashboard — no forced project chip in the chrome */
-  const showProjectSwitcher = role !== "Admin";
-  const isAdminSurface = role === "Admin" && pathname.startsWith("/admin");
+  const showProjectSwitcher = role !== "Admin" && role !== "SuperAdmin";
+  const isAdminSurface = (role === "Admin" || role === "SuperAdmin") && pathname.startsWith("/admin");
 
   if (embedMode) {
     return (

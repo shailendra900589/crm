@@ -4,9 +4,10 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-# Field pages Admin can toggle for Manager / TL / BDM
+# Field pages Admin can toggle for Manager / TL / BDM / Ops
 FIELD_PAGE_CATALOG = [
     {"page_key": "dashboard", "label": "Dashboard / Workdesk", "href": "/dashboard", "description": "Role home with KPIs and forms"},
+    {"page_key": "verification", "label": "Verification queue", "href": "/verification", "description": "Assign and complete document verification"},
     {"page_key": "leads", "label": "Leads", "href": "/leads", "description": "Lead list and merchant records"},
     {"page_key": "pipeline", "label": "Pipeline", "href": "/pipeline", "description": "Kanban pipeline board"},
     {"page_key": "duplicates", "label": "Duplicates", "href": "/duplicates", "description": "Duplicate lead review"},
@@ -22,12 +23,26 @@ FIELD_PAGE_CATALOG = [
 FIELD_PAGE_KEYS = [p["page_key"] for p in FIELD_PAGE_CATALOG]
 LOCKED_PAGE_KEYS = {p["page_key"] for p in FIELD_PAGE_CATALOG if p.get("locked")}
 
-# Matches current NAV defaults
 DEFAULT_ROLE_PAGES = {
     User.Role.MANAGER: {k: True for k in FIELD_PAGE_KEYS},
     User.Role.TL: {k: True for k in FIELD_PAGE_KEYS},
+    User.Role.OPS: {
+        "dashboard": True,
+        "verification": True,
+        "leads": True,
+        "pipeline": False,
+        "duplicates": False,
+        "follow-ups": False,
+        "alerts": True,
+        "reports": False,
+        "targets": False,
+        "visits": False,
+        "team": False,
+        "profile": True,
+    },
     User.Role.BDM: {
         "dashboard": True,
+        "verification": False,
         "leads": True,
         "pipeline": True,
         "duplicates": False,
@@ -48,6 +63,8 @@ ADMIN_PAGE_KEYS = [
     "admin.forms",
     "admin.audit",
     "admin.permissions",
+    "admin.organizations",
+    "verification",
     "team",
     "reports",
     "profile",
@@ -73,6 +90,8 @@ def ensure_default_page_permissions():
 def allowed_pages_for_user(user):
     if not user or not getattr(user, "is_authenticated", False):
         return []
+    if user.role == User.Role.SUPERADMIN:
+        return list(dict.fromkeys(ADMIN_PAGE_KEYS + ["dashboard", "verification", "leads"]))
     if user.role == User.Role.ADMIN:
         return list(ADMIN_PAGE_KEYS)
 
@@ -90,17 +109,18 @@ def allowed_pages_for_user(user):
 def user_can_access_page(user, page_key: str) -> bool:
     if not page_key:
         return False
-    if user.role == User.Role.ADMIN:
-        return page_key in ADMIN_PAGE_KEYS or page_key in FIELD_PAGE_KEYS
+    if user.role in (User.Role.ADMIN, User.Role.SUPERADMIN):
+        return True
     return page_key in allowed_pages_for_user(user)
 
 
 def page_permissions_matrix():
-    """Admin UI payload: one row per page with Manager/TL/BDM toggles."""
+    """Admin UI payload: one row per page with Manager/TL/BDM/Ops toggles."""
     ensure_default_page_permissions()
     from .models import RolePagePermission
 
-    rows = RolePagePermission.objects.filter(role__in=[User.Role.MANAGER, User.Role.TL, User.Role.BDM])
+    roles = [User.Role.MANAGER, User.Role.TL, User.Role.BDM, User.Role.OPS]
+    rows = RolePagePermission.objects.filter(role__in=roles)
     lookup = {(r.page_key, r.role): r.enabled for r in rows}
 
     pages = []
@@ -114,10 +134,9 @@ def page_permissions_matrix():
                 "description": meta.get("description", ""),
                 "locked": bool(meta.get("locked")),
                 "roles": {
-                    User.Role.MANAGER: lookup.get((key, User.Role.MANAGER), DEFAULT_ROLE_PAGES[User.Role.MANAGER].get(key, True)),
-                    User.Role.TL: lookup.get((key, User.Role.TL), DEFAULT_ROLE_PAGES[User.Role.TL].get(key, True)),
-                    User.Role.BDM: lookup.get((key, User.Role.BDM), DEFAULT_ROLE_PAGES[User.Role.BDM].get(key, False)),
+                    role: lookup.get((key, role), DEFAULT_ROLE_PAGES.get(role, {}).get(key, False))
+                    for role in roles
                 },
             }
         )
-    return {"pages": pages}
+    return pages
