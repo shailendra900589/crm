@@ -1,28 +1,60 @@
 from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
-from django.utils import timezone
 
 
 def seed_default_org(apps, schema_editor):
-    Organization = apps.get_model("api", "Organization")
-    Project = apps.get_model("api", "Project")
-    User = apps.get_model("api", "User")
+    """Use SQL so we never hit a live-model / half-migrated ORM mismatch."""
+    from django.utils import timezone
 
-    org, _ = Organization.objects.get_or_create(
-        slug="default",
-        defaults={
-            "name": "Default Company",
-            "email": "admin@crm.local",
-            "status": "active",
-            "plan_label": "Legacy",
-            "is_public": True,
-            "trial_ends_at": None,
-            "approved_at": timezone.now(),
-        },
-    )
-    Project.objects.filter(organization__isnull=True).update(organization=org)
-    User.objects.filter(organization__isnull=True).exclude(role="SuperAdmin").update(organization=org)
+    now = timezone.now()
+    conn = schema_editor.connection
+    with conn.cursor() as cursor:
+        cursor.execute("SELECT id FROM api_organization WHERE slug = %s", ["default"])
+        row = cursor.fetchone()
+        if row:
+            org_id = row[0]
+        else:
+            cursor.execute(
+                """
+                INSERT INTO api_organization (
+                    name, slug, email, phone, city, status, plan_label, trial_ends_at,
+                    payment_notes, hrms_connected, hrms_company_id, hrms_api_base_url,
+                    admin_name, is_public, created_at, approved_at, approved_by_id
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, NULL,
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, NULL
+                ) RETURNING id
+                """,
+                [
+                    "Default Company",
+                    "default",
+                    "admin@crm.local",
+                    "",
+                    "",
+                    "active",
+                    "Legacy",
+                    "",
+                    False,
+                    "",
+                    "https://hrms.trackbook.co",
+                    "",
+                    True,
+                    now,
+                    now,
+                ],
+            )
+            org_id = cursor.fetchone()[0]
+
+        cursor.execute(
+            "UPDATE api_project SET organization_id = %s WHERE organization_id IS NULL",
+            [org_id],
+        )
+        cursor.execute(
+            "UPDATE api_user SET organization_id = %s WHERE organization_id IS NULL AND COALESCE(role, '') <> %s",
+            [org_id, "SuperAdmin"],
+        )
 
 
 def noop_reverse(apps, schema_editor):
@@ -67,7 +99,10 @@ class Migration(migrations.Migration):
                 ("hrms_company_id", models.CharField(blank=True, max_length=64)),
                 ("hrms_api_base_url", models.URLField(blank=True, default="https://hrms.trackbook.co")),
                 ("admin_name", models.CharField(blank=True, max_length=120)),
-                ("is_public", models.BooleanField(default=False, help_text="Published by Super Admin for signup visibility")),
+                (
+                    "is_public",
+                    models.BooleanField(default=False, help_text="Published by Super Admin for signup visibility"),
+                ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
                 ("approved_at", models.DateTimeField(blank=True, null=True)),
                 (

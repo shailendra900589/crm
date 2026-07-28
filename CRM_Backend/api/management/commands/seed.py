@@ -4,9 +4,10 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 from django.utils.text import slugify
 
-from api.models import CustomForm, Lead, LeadVisit, Merchant, Product, Project, Team
+from api.models import CustomForm, Lead, LeadVisit, Merchant, Organization, Product, Project, Team
 
 User = get_user_model()
+
 
 DEFAULT_FORM = [
     {"field_id": "gst_number", "label": "GST Number", "type": "text", "required": True},
@@ -28,11 +29,29 @@ class Command(BaseCommand):
     help = "Seed demo users, projects, teams, forms, merchants, and leads"
 
     def handle(self, *args, **options):
+        # Ensure default org exists before touching users (needs migration 0013+)
+        default_org, _ = Organization.objects.get_or_create(
+            slug="default",
+            defaults={
+                "name": "Default Company",
+                "email": "admin@crm.local",
+                "status": Organization.Status.ACTIVE,
+                "plan_label": "Legacy",
+                "is_public": True,
+            },
+        )
+
         admin, _ = User.objects.get_or_create(
             username="admin",
-            defaults={"role": User.Role.ADMIN, "first_name": "Admin", "email": "admin@crm.local"},
+            defaults={
+                "role": User.Role.ADMIN,
+                "first_name": "Admin",
+                "email": "admin@crm.local",
+                "organization": default_org,
+            },
         )
         admin.role = User.Role.ADMIN
+        admin.organization = default_org
         admin.is_active = True
         admin.is_active_user = True
         admin.is_staff = True
@@ -42,22 +61,28 @@ class Command(BaseCommand):
 
         superadmin, _ = User.objects.get_or_create(
             username="superadmin",
-            defaults={"role": User.Role.SUPERADMIN, "first_name": "Super", "last_name": "Admin", "email": "superadmin@crm.local"},
+            defaults={
+                "role": User.Role.SUPERADMIN,
+                "first_name": "Super",
+                "last_name": "Admin",
+                "email": "superadmin@crm.local",
+            },
         )
         superadmin.role = User.Role.SUPERADMIN
+        superadmin.organization = None
         superadmin.is_active = True
         superadmin.is_active_user = True
         superadmin.is_staff = True
         superadmin.is_superuser = True
-        superadmin.organization = None
         superadmin.set_password("password123")
         superadmin.save()
 
         manager, _ = User.objects.get_or_create(
             username="manager",
-            defaults={"role": User.Role.MANAGER, "first_name": "Raj", "reports_to": admin, "email": "manager@crm.local"},
+            defaults={"role": User.Role.MANAGER, "first_name": "Raj", "reports_to": admin, "email": "manager@crm.local", "organization": default_org},
         )
         manager.role = User.Role.MANAGER
+        manager.organization = default_org
         manager.is_active = True
         manager.is_active_user = True
         manager.set_password("password123")
@@ -65,9 +90,10 @@ class Command(BaseCommand):
 
         tl, _ = User.objects.get_or_create(
             username="tl",
-            defaults={"role": User.Role.TL, "first_name": "Priya", "reports_to": manager, "email": "tl@crm.local"},
+            defaults={"role": User.Role.TL, "first_name": "Priya", "reports_to": manager, "email": "tl@crm.local", "organization": default_org},
         )
         tl.role = User.Role.TL
+        tl.organization = default_org
         tl.is_active = True
         tl.is_active_user = True
         tl.set_password("password123")
@@ -75,9 +101,10 @@ class Command(BaseCommand):
 
         bdm, _ = User.objects.get_or_create(
             username="bdm",
-            defaults={"role": User.Role.BDM, "first_name": "Amit", "reports_to": tl, "email": "bdm@crm.local"},
+            defaults={"role": User.Role.BDM, "first_name": "Amit", "reports_to": tl, "email": "bdm@crm.local", "organization": default_org},
         )
         bdm.role = User.Role.BDM
+        bdm.organization = default_org
         bdm.is_active = True
         bdm.is_active_user = True
         bdm.set_password("password123")
@@ -93,8 +120,17 @@ class Command(BaseCommand):
         for name, desc, color, product_names in projects_data:
             project, _ = Project.objects.get_or_create(
                 slug=slugify(name),
-                defaults={"name": name, "description": desc, "color": color, "created_by": admin},
+                defaults={
+                    "name": name,
+                    "description": desc,
+                    "color": color,
+                    "created_by": admin,
+                    "organization": default_org,
+                },
             )
+            if not project.organization_id:
+                project.organization = default_org
+                project.save(update_fields=["organization"])
             projects.append(project)
             for pname in product_names:
                 Product.objects.get_or_create(
