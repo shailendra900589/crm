@@ -232,7 +232,31 @@ export const api = {
     request<CustomForm>(`/api/projects/${projectId}/custom-form/`, { method: "PUT", body: JSON.stringify(data) }),
 
   registerOrganization: (data: Record<string, unknown>) =>
-    request<{ detail: string; organization: Organization }>(`/api/public/register-organization/`, {
+    request<{ detail: string; organization: Organization; documents_uploaded?: number }>(
+      `/api/public/register-organization/`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  registerOrganizationForm: (form: FormData) =>
+    request<{ detail: string; organization: Organization; documents_uploaded?: number }>(
+      `/api/public/register-organization/`,
+      { method: "POST", body: form },
+    ),
+  organizationDocuments: (id: number) =>
+    request<{ docs_verification_status: string; docs_rejection_reason: string; results: OrganizationDocument[] }>(
+      `/api/organizations/${id}/documents/`,
+    ),
+  uploadOrganizationDocuments: (id: number, form: FormData) =>
+    request<{ uploaded: number; organization: Organization }>(`/api/organizations/${id}/documents/`, {
+      method: "POST",
+      body: form,
+    }),
+  reviewOrganizationDocument: (orgId: number, docId: number, data: { status: string; notes?: string }) =>
+    request<{ document: OrganizationDocument; organization: Organization }>(
+      `/api/organizations/${orgId}/documents/${docId}/review/`,
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  verifyOrganizationDocuments: (id: number, data: { status: string; reason?: string; force?: boolean }) =>
+    request<Organization>(`/api/organizations/${id}/verify_documents/`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
@@ -962,6 +986,22 @@ export type SubscriptionPackage = {
   updated_at?: string;
 };
 
+export type OrganizationDocument = {
+  id: number;
+  organization: number;
+  doc_type: string;
+  doc_type_display?: string;
+  label?: string;
+  file?: string;
+  file_url?: string | null;
+  status: "pending" | "approved" | "rejected";
+  status_display?: string;
+  notes?: string;
+  verified_by_name?: string | null;
+  verified_at?: string | null;
+  created_at?: string;
+};
+
 export type Organization = {
   id: number;
   name: string;
@@ -983,6 +1023,13 @@ export type Organization = {
   amount_paid?: string | number | null;
   paid_at?: string | null;
   package_assigned_at?: string | null;
+  docs_verification_status?: "pending" | "in_review" | "verified" | "rejected";
+  docs_verification_status_display?: string;
+  docs_verified_at?: string | null;
+  docs_verified_by_name?: string | null;
+  docs_rejection_reason?: string;
+  documents?: OrganizationDocument[];
+  document_count?: number;
   hrms_connected?: boolean;
   hrms_company_id?: string;
   hrms_api_base_url?: string;

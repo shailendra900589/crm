@@ -41,6 +41,12 @@ class Organization(models.Model):
         PENDING = "pending", "Payment pending"
         PAID = "paid", "Paid"
 
+    class DocsVerificationStatus(models.TextChoices):
+        PENDING = "pending", "Awaiting documents"
+        IN_REVIEW = "in_review", "Under Super Admin review"
+        VERIFIED = "verified", "Corporate docs verified"
+        REJECTED = "rejected", "Documents rejected"
+
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)
     email = models.EmailField()
@@ -68,6 +74,21 @@ class Organization(models.Model):
     amount_paid = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     package_assigned_at = models.DateTimeField(null=True, blank=True)
+    docs_verification_status = models.CharField(
+        max_length=20,
+        choices=DocsVerificationStatus.choices,
+        default=DocsVerificationStatus.PENDING,
+        db_index=True,
+    )
+    docs_verified_at = models.DateTimeField(null=True, blank=True)
+    docs_verified_by = models.ForeignKey(
+        "User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="orgs_docs_verified",
+    )
+    docs_rejection_reason = models.TextField(blank=True)
     hrms_connected = models.BooleanField(default=False)
     hrms_company_id = models.CharField(max_length=64, blank=True)
     hrms_api_base_url = models.URLField(blank=True, default="https://hrms.trackbook.co")
@@ -93,9 +114,49 @@ class Organization(models.Model):
             return False
         if self.status == self.Status.PENDING:
             return False
+        if self.docs_verification_status != self.DocsVerificationStatus.VERIFIED:
+            return False
         if self.status == self.Status.TRIAL and self.trial_ends_at and self.trial_ends_at < timezone.now():
             return False
         return self.status in (self.Status.TRIAL, self.Status.ACTIVE)
+
+
+class OrganizationDocument(models.Model):
+    """Corporate KYC / registration documents reviewed by Super Admin."""
+
+    class DocType(models.TextChoices):
+        GST = "gst_certificate", "GST certificate"
+        PAN = "pan_card", "Company PAN"
+        INCORPORATION = "incorporation", "Certificate of incorporation"
+        ADDRESS = "address_proof", "Address proof"
+        CHEQUE = "cancelled_cheque", "Cancelled cheque"
+        OTHER = "other", "Other"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending review"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="documents")
+    doc_type = models.CharField(max_length=40, choices=DocType.choices, default=DocType.OTHER)
+    label = models.CharField(max_length=160, blank=True)
+    file = models.FileField(upload_to="org_docs/%Y/%m/")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
+    notes = models.TextField(blank=True)
+    uploaded_by = models.ForeignKey(
+        "User", null=True, blank=True, on_delete=models.SET_NULL, related_name="org_docs_uploaded"
+    )
+    verified_by = models.ForeignKey(
+        "User", null=True, blank=True, on_delete=models.SET_NULL, related_name="org_docs_reviewed"
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.organization_id} · {self.doc_type}"
 
 
 class Project(models.Model):

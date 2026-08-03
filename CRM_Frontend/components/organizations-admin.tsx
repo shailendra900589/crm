@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge, Button, Input } from "@/components/ui";
-import { api, type Organization, type PlatformSummary } from "@/lib/api";
+import { api, fileUrl, type Organization, type PlatformSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -241,6 +241,40 @@ export function OrganizationsAdminView() {
     },
   });
 
+  const verifyDocs = useMutation({
+    mutationFn: (status: "verified" | "rejected") =>
+      api.verifyOrganizationDocuments(selected!.id, {
+        status,
+        reason: paymentNotes || undefined,
+        force: status === "verified" && !(selected?.documents?.length || selected?.document_count),
+      }),
+    onSuccess: (org) => {
+      invalidate();
+      setSelected(org);
+    },
+  });
+
+  const reviewDoc = useMutation({
+    mutationFn: (opts: { docId: number; status: "approved" | "rejected" }) =>
+      api.reviewOrganizationDocument(selected!.id, opts.docId, { status: opts.status }),
+    onSuccess: (res) => {
+      invalidate();
+      setSelected(res.organization);
+    },
+  });
+
+  const uploadDocs = useMutation({
+    mutationFn: (fileList: FileList) => {
+      const fd = new FormData();
+      Array.from(fileList).forEach((f, i) => fd.append(`doc_${i}`, f));
+      return api.uploadOrganizationDocuments(selected!.id, fd);
+    },
+    onSuccess: (res) => {
+      invalidate();
+      setSelected(res.organization);
+    },
+  });
+
   const sync = useMutation({
     mutationFn: () => api.syncHrmsEmployees(selected!.id, { hrms_token: hrmsToken, force: true }),
   });
@@ -374,6 +408,16 @@ export function OrganizationsAdminView() {
                     <Building2 className="h-4 w-4 shrink-0 text-slate-400" />
                     <p className="font-semibold text-slate-900 dark:text-slate-50">{o.name}</p>
                     <Badge status={statusBadge(o.status)} label={o.status_display || o.status} />
+                    {o.docs_verification_status && o.docs_verification_status !== "verified" && (
+                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                        Docs: {o.docs_verification_status_display || o.docs_verification_status}
+                      </span>
+                    )}
+                    {o.docs_verification_status === "verified" && (
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                        Docs verified
+                      </span>
+                    )}
                     {o.access_allowed === false && o.status !== "rejected" && (
                       <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700">
                         Access off
@@ -631,23 +675,155 @@ export function OrganizationsAdminView() {
                   </p>
                 </div>
 
-                {(selected.status === "pending" || selected.status === "rejected") && (
-                  <div className="flex flex-wrap gap-2">
-                    <Button className="gap-1.5" onClick={() => approve.mutate("trial")} disabled={approve.isPending}>
-                      <CheckCircle2 className="h-4 w-4" /> Approve + Trial
-                    </Button>
-                    <Button
-                      className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-                      onClick={() => approve.mutate("active")}
-                      disabled={approve.isPending}
-                    >
-                      Approve + Paid
-                    </Button>
-                    {selected.status === "pending" && (
-                      <Button variant="danger" className="gap-1.5" onClick={() => reject.mutate()} disabled={reject.isPending}>
-                        <XCircle className="h-4 w-4" /> Reject
+                <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Corporate documents</p>
+                      <p className="text-xs text-slate-500">
+                        Status:{" "}
+                        <strong>
+                          {selected.docs_verification_status_display || selected.docs_verification_status || "—"}
+                        </strong>
+                        {selected.document_count != null ? ` · ${selected.document_count} file(s)` : ""}
+                      </p>
+                      {selected.docs_rejection_reason ? (
+                        <p className="mt-1 text-xs text-rose-600">{selected.docs_rejection_reason}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button
+                        className="h-8 gap-1 text-xs"
+                        disabled={verifyDocs.isPending}
+                        onClick={() => verifyDocs.mutate("verified")}
+                      >
+                        Mark docs verified
                       </Button>
+                      <Button
+                        variant="danger"
+                        className="h-8 text-xs"
+                        disabled={verifyDocs.isPending}
+                        onClick={() => verifyDocs.mutate("rejected")}
+                      >
+                        Reject docs
+                      </Button>
+                    </div>
+                  </div>
+                  <ul className="max-h-40 space-y-1.5 overflow-y-auto">
+                    {(selected.documents || []).length === 0 ? (
+                      <li className="text-xs text-slate-400">No documents uploaded yet — upload below.</li>
+                    ) : (
+                      (selected.documents || []).map((d) => (
+                        <li
+                          key={d.id}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 px-2 py-1.5 text-xs dark:border-slate-800"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-800 dark:text-slate-100">
+                              {d.doc_type_display || d.doc_type}
+                              {d.label ? ` · ${d.label}` : ""}
+                            </p>
+                            <p className="text-slate-400">{d.status_display || d.status}</p>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {d.file_url ? (
+                              <a
+                                href={d.file_url.startsWith("http") ? d.file_url : fileUrl(d.file_url) || d.file_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded px-1.5 py-0.5 font-semibold text-blue-600 hover:underline"
+                              >
+                                View
+                              </a>
+                            ) : null}
+                            {d.status === "pending" && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-700"
+                                  onClick={() => reviewDoc.mutate({ docId: d.id, status: "approved" })}
+                                >
+                                  OK
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rounded bg-rose-50 px-1.5 py-0.5 font-semibold text-rose-700"
+                                  onClick={() => reviewDoc.mutate({ docId: d.id, status: "rejected" })}
+                                >
+                                  No
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </li>
+                      ))
                     )}
+                  </ul>
+                  <label className="mt-2 flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-800">
+                    {uploadDocs.isPending ? "Uploading…" : "Upload / add documents"}
+                    <input
+                      type="file"
+                      multiple
+                      accept=".pdf,image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files?.length) uploadDocs.mutate(e.target.files);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {(selected.status === "pending" || selected.status === "rejected") && (
+                  <div className="space-y-2">
+                    {selected.docs_verification_status !== "verified" && (
+                      <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+                        Verify corporate documents before Approve. Or use force override if needed.
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        className="gap-1.5"
+                        onClick={() => approve.mutate("trial")}
+                        disabled={approve.isPending || selected.docs_verification_status !== "verified"}
+                      >
+                        <CheckCircle2 className="h-4 w-4" /> Approve + Trial
+                      </Button>
+                      <Button
+                        className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                        onClick={() => approve.mutate("active")}
+                        disabled={approve.isPending || selected.docs_verification_status !== "verified"}
+                      >
+                        Approve + Paid
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="text-xs"
+                        disabled={approve.isPending}
+                        onClick={() => {
+                          if (!confirm("Force approve without document verification?")) return;
+                          api
+                            .approveOrganization(selected.id, {
+                              mode: "trial",
+                              force: true,
+                              trial_days: Number(trialDays) || 15,
+                              plan_label: plan,
+                              payment_notes: paymentNotes,
+                              ...packagePayload(),
+                            })
+                            .then((org) => {
+                              invalidate();
+                              setSelected(org);
+                            });
+                        }}
+                      >
+                        Force approve
+                      </Button>
+                      {selected.status === "pending" && (
+                        <Button variant="danger" className="gap-1.5" onClick={() => reject.mutate()} disabled={reject.isPending}>
+                          <XCircle className="h-4 w-4" /> Reject
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
 

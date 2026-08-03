@@ -6,8 +6,9 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Sales CRM",
-  description: "Premium Multi-Project Sales CRM",
+  title: "Trackbook CRM — Multi-Project Sales Platform",
+  description:
+    "Field sales CRM for leads, visits, verification, and multi-tenant company control. Register, verify corporate docs, then go live.",
 };
 
 const themeInitScript = `

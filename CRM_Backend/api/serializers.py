@@ -12,6 +12,7 @@ from .models import (
     Merchant,
     Notification,
     Organization,
+    OrganizationDocument,
     Product,
     Project,
     SalesTarget,
@@ -605,17 +606,63 @@ class SubscriptionPackageSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+class OrganizationDocumentSerializer(serializers.ModelSerializer):
+    doc_type_display = serializers.CharField(source="get_doc_type_display", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    file_url = serializers.SerializerMethodField()
+    verified_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrganizationDocument
+        fields = [
+            "id",
+            "organization",
+            "doc_type",
+            "doc_type_display",
+            "label",
+            "file",
+            "file_url",
+            "status",
+            "status_display",
+            "notes",
+            "uploaded_by",
+            "verified_by",
+            "verified_by_name",
+            "verified_at",
+            "created_at",
+        ]
+        read_only_fields = ["organization", "uploaded_by", "verified_by", "verified_at", "created_at"]
+
+    def get_file_url(self, obj):
+        try:
+            return obj.file.url if obj.file else None
+        except Exception:
+            return None
+
+    def get_verified_by_name(self, obj):
+        if not obj.verified_by_id:
+            return None
+        u = obj.verified_by
+        return u.get_full_name() or u.username
+
+
 class OrganizationSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     approved_by_name = serializers.SerializerMethodField()
     user_count = serializers.SerializerMethodField()
     project_count = serializers.SerializerMethodField()
+    document_count = serializers.SerializerMethodField()
     access_allowed = serializers.BooleanField(source="is_access_allowed", read_only=True)
     package_name = serializers.CharField(source="package.name", read_only=True, allow_null=True)
     package_price = serializers.DecimalField(
         source="package.price", max_digits=12, decimal_places=2, read_only=True, allow_null=True
     )
     payment_status_display = serializers.CharField(source="get_payment_status_display", read_only=True)
+    docs_verification_status_display = serializers.CharField(
+        source="get_docs_verification_status_display", read_only=True
+    )
+    docs_verified_by_name = serializers.SerializerMethodField()
+    documents = OrganizationDocumentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Organization
@@ -640,6 +687,13 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "amount_paid",
             "paid_at",
             "package_assigned_at",
+            "docs_verification_status",
+            "docs_verification_status_display",
+            "docs_verified_at",
+            "docs_verified_by_name",
+            "docs_rejection_reason",
+            "documents",
+            "document_count",
             "hrms_connected",
             "hrms_company_id",
             "hrms_api_base_url",
@@ -653,18 +707,34 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "project_count",
             "access_allowed",
         ]
-        read_only_fields = ["slug", "created_at", "approved_by", "approved_at", "paid_at", "package_assigned_at"]
+        read_only_fields = [
+            "slug",
+            "created_at",
+            "approved_by",
+            "approved_at",
+            "paid_at",
+            "package_assigned_at",
+            "docs_verified_at",
+        ]
 
     def get_approved_by_name(self, obj):
         if not obj.approved_by_id:
             return None
         return obj.approved_by.get_full_name() or obj.approved_by.username
 
+    def get_docs_verified_by_name(self, obj):
+        if not obj.docs_verified_by_id:
+            return None
+        return obj.docs_verified_by.get_full_name() or obj.docs_verified_by.username
+
     def get_user_count(self, obj):
         return obj.users.filter(is_active_user=True).count()
 
     def get_project_count(self, obj):
         return obj.projects.filter(is_active=True).count()
+
+    def get_document_count(self, obj):
+        return obj.documents.count()
 
 
 class OrganizationWriteSerializer(serializers.ModelSerializer):

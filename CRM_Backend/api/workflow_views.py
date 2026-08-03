@@ -10,6 +10,7 @@ from django.utils.text import slugify
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -21,7 +22,16 @@ from .entitlements import (
     module_catalog_payload,
     sanitize_modules,
 )
-from .models import Lead, LeadDocument, Notification, Organization, Project, SubscriptionPackage, VerificationWork
+from .models import (
+    Lead,
+    LeadDocument,
+    Notification,
+    Organization,
+    OrganizationDocument,
+    Project,
+    SubscriptionPackage,
+    VerificationWork,
+)
 from .permissions import (
     can_assign_verification,
     can_edit_lead_data,
@@ -34,11 +44,60 @@ from .permissions import (
     verification_works_for_user,
 )
 from .serializers import (
+    OrganizationDocumentSerializer,
     OrganizationSerializer,
     OrganizationWriteSerializer,
     SubscriptionPackageSerializer,
     VerificationWorkSerializer,
 )
+
+ORG_DOC_FILE_KEYS = {
+    "gst_certificate": OrganizationDocument.DocType.GST,
+    "pan_card": OrganizationDocument.DocType.PAN,
+    "incorporation": OrganizationDocument.DocType.INCORPORATION,
+    "address_proof": OrganizationDocument.DocType.ADDRESS,
+    "cancelled_cheque": OrganizationDocument.DocType.CHEQUE,
+    "other_doc": OrganizationDocument.DocType.OTHER,
+    "gst_file": OrganizationDocument.DocType.GST,
+    "pan_file": OrganizationDocument.DocType.PAN,
+}
+
+
+def _save_org_registration_docs(org, request, uploaded_by=None):
+    saved = 0
+    for key, doc_type in ORG_DOC_FILE_KEYS.items():
+        f = request.FILES.get(key)
+        if not f:
+            continue
+        OrganizationDocument.objects.create(
+            organization=org,
+            doc_type=doc_type,
+            label=f.name,
+            file=f,
+            uploaded_by=uploaded_by,
+            status=OrganizationDocument.Status.PENDING,
+        )
+        saved += 1
+    # Multiple extras: doc_0, doc_1…
+    for key, f in request.FILES.items():
+        if key in ORG_DOC_FILE_KEYS:
+            continue
+        if not str(key).startswith("doc"):
+            continue
+        OrganizationDocument.objects.create(
+            organization=org,
+            doc_type=OrganizationDocument.DocType.OTHER,
+            label=f.name,
+            file=f,
+            uploaded_by=uploaded_by,
+            status=OrganizationDocument.Status.PENDING,
+        )
+        saved += 1
+    if saved:
+        org.docs_verification_status = Organization.DocsVerificationStatus.IN_REVIEW
+        org.docs_rejection_reason = ""
+        org.save(update_fields=["docs_verification_status", "docs_rejection_reason"])
+    return saved
 
 User = get_user_model()
 
@@ -54,9 +113,10 @@ def _unique_slug(base: str) -> str:
 
 
 class RegisterOrganizationView(APIView):
-    """Public company registration → pending Super Admin approval / trial."""
+    """Public company registration → pending Super Admin document verify + approval."""
 
     permission_classes = [AllowAny]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
         name = (request.data.get("company_name") or request.data.get("name") or "").strip()
@@ -66,11 +126,18 @@ class RegisterOrganizationView(APIView):
         admin_name = (request.data.get("admin_name") or "").strip()
         admin_username = (request.data.get("username") or "").strip()
         password = request.data.get("password") or ""
-        want_trial = bool(request.data.get("trial", True))
+        trial_raw = request.data.get("trial", True)
+        want_trial = str(trial_raw).lower() in ("1", "true", "yes", "on") if not isinstance(trial_raw, bool) else trial_raw
+        accept_terms = str(request.data.get("accept_terms", "")).lower() in ("1", "true", "yes", "on")
 
         if not name or not email or not admin_username or len(password) < 6:
             return Response(
                 {"detail": "company_name, email, username and password (min 6) are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not accept_terms:
+            return Response(
+                {"detail": "Please accept Terms & Conditions and Privacy Policy to register."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if User.objects.filter(username=admin_username).exists():
@@ -93,6 +160,7 @@ class RegisterOrganizationView(APIView):
             package=pkg,
             enabled_modules=sanitize_modules((pkg.module_keys if pkg else None)),
             payment_status=Organization.PaymentStatus.NONE,
+            docs_verification_status=Organization.DocsVerificationStatus.PENDING,
         )
         admin = User.objects.create_user(
             username=admin_username,
@@ -102,19 +170,25 @@ class RegisterOrganizationView(APIView):
             role=User.Role.ADMIN,
             organization=org,
             mobile_number=phone,
-            is_active_user=False,  # until Super Admin approves
+            is_active_user=False,  # until Super Admin verifies docs + approves
         )
+        docs_count = _save_org_registration_docs(org, request, uploaded_by=None)
         # Notify Super Admins
         for sa in User.objects.filter(role=User.Role.SUPERADMIN, is_active_user=True)[:10]:
             Notification.objects.create(
                 user=sa,
-                message=f"New company registration: {org.name} — approve / trial / payment",
+                message=f"New company registration: {org.name} — verify corporate docs ({docs_count} files), then approve",
                 link="/admin/organizations",
             )
+        org.refresh_from_db()
         return Response(
             {
-                "detail": "Registration received. Super Admin will approve and enable trial or payment.",
+                "detail": (
+                    "Registration received. Super Admin will verify your corporate documents, "
+                    "then enable trial or paid access."
+                ),
                 "organization": OrganizationSerializer(org).data,
+                "documents_uploaded": docs_count,
                 "admin_user_id": admin.id,
             },
             status=status.HTTP_201_CREATED,
@@ -122,9 +196,10 @@ class RegisterOrganizationView(APIView):
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
-    queryset = Organization.objects.all()
+    queryset = Organization.objects.all().prefetch_related("documents")
     permission_classes = [IsAuthenticated]
     pagination_class = None
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_serializer_class(self):
         if self.action in ("create", "update", "partial_update"):
@@ -135,15 +210,17 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         user = self.request.user
         # Platform company list / manage is Super Admin only.
         # Company Admin may still retrieve/sync their own org (HRMS).
+        base = Organization.objects.all().prefetch_related("documents")
         if is_superadmin(user):
-            return Organization.objects.all()
+            return base
         if is_company_admin(user) and user.organization_id and self.action in (
             "retrieve",
             "sync_hrms_employees",
             "partial_update",
             "update",
+            "documents",
         ):
-            return Organization.objects.filter(id=user.organization_id)
+            return base.filter(id=user.organization_id)
         return Organization.objects.none()
 
     def create(self, request, *args, **kwargs):
@@ -256,6 +333,17 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         if not is_superadmin(request.user):
             raise PermissionDenied("Only Super Admin.")
         org = self.get_object()
+        force = bool(request.data.get("force"))
+        if org.docs_verification_status != Organization.DocsVerificationStatus.VERIFIED and not force:
+            return Response(
+                {
+                    "detail": (
+                        "Verify corporate documents first (or pass force=1 to override). "
+                        f"Current docs status: {org.docs_verification_status}."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         mode = (request.data.get("mode") or "trial").lower()  # trial | active
         pkg = None
         if request.data.get("package_id"):
@@ -280,6 +368,10 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             org.plan_label = plan or (pkg.name if pkg else "Trial")
         if payment_notes:
             org.payment_notes = payment_notes
+        if force and org.docs_verification_status != Organization.DocsVerificationStatus.VERIFIED:
+            org.docs_verification_status = Organization.DocsVerificationStatus.VERIFIED
+            org.docs_verified_at = timezone.now()
+            org.docs_verified_by = request.user
         org.is_public = publish
         org.approved_by = request.user
         org.approved_at = timezone.now()
@@ -303,6 +395,130 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         org.status = Organization.Status.REJECTED
         org.payment_notes = (request.data.get("reason") or org.payment_notes or "Rejected").strip()
         org.save(update_fields=["status", "payment_notes"])
+        return Response(OrganizationSerializer(org).data)
+
+    @action(detail=True, methods=["get", "post"])
+    def documents(self, request, pk=None):
+        """List or upload corporate documents (Super Admin upload / company view)."""
+        org = self.get_object()
+        user = request.user
+        if not (
+            is_superadmin(user)
+            or (is_company_admin(user) and user.organization_id == org.id)
+        ):
+            raise PermissionDenied("Not allowed.")
+        if request.method == "GET":
+            return Response(
+                {
+                    "docs_verification_status": org.docs_verification_status,
+                    "docs_rejection_reason": org.docs_rejection_reason,
+                    "results": OrganizationDocumentSerializer(org.documents.all(), many=True).data,
+                }
+            )
+        # POST upload (Super Admin can always upload; company admin while pending)
+        if not is_superadmin(user) and org.status not in (
+            Organization.Status.PENDING,
+            Organization.Status.REJECTED,
+        ):
+            return Response(
+                {"detail": "Documents can only be re-uploaded while registration is pending."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        count = _save_org_registration_docs(org, request, uploaded_by=user if user.is_authenticated else None)
+        if not count:
+            return Response({"detail": "No files uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+        org.refresh_from_db()
+        return Response(
+            {
+                "uploaded": count,
+                "organization": OrganizationSerializer(org).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"], url_path=r"documents/(?P<doc_id>[0-9]+)/review")
+    def review_document(self, request, pk=None, doc_id=None):
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        org = self.get_object()
+        doc = org.documents.filter(id=doc_id).first()
+        if not doc:
+            return Response({"detail": "Document not found."}, status=status.HTTP_404_NOT_FOUND)
+        decision = (request.data.get("status") or request.data.get("decision") or "").strip().lower()
+        if decision not in ("approved", "rejected", "pending"):
+            return Response({"detail": "status must be approved, rejected, or pending."}, status=400)
+        doc.status = decision
+        doc.notes = (request.data.get("notes") or doc.notes or "").strip()
+        doc.verified_by = request.user
+        doc.verified_at = timezone.now()
+        doc.save()
+        # Roll up org docs status when all reviewed
+        pending = org.documents.filter(status=OrganizationDocument.Status.PENDING).exists()
+        rejected = org.documents.filter(status=OrganizationDocument.Status.REJECTED).exists()
+        if not org.documents.exists():
+            org.docs_verification_status = Organization.DocsVerificationStatus.PENDING
+        elif pending:
+            org.docs_verification_status = Organization.DocsVerificationStatus.IN_REVIEW
+        elif rejected:
+            org.docs_verification_status = Organization.DocsVerificationStatus.REJECTED
+            org.docs_rejection_reason = (request.data.get("org_reason") or doc.notes or "Documents rejected").strip()
+        else:
+            org.docs_verification_status = Organization.DocsVerificationStatus.VERIFIED
+            org.docs_verified_at = timezone.now()
+            org.docs_verified_by = request.user
+            org.docs_rejection_reason = ""
+        org.save()
+        return Response(
+            {
+                "document": OrganizationDocumentSerializer(doc).data,
+                "organization": OrganizationSerializer(org).data,
+            }
+        )
+
+    @action(detail=True, methods=["post"])
+    def verify_documents(self, request, pk=None):
+        """Mark all corporate docs verified (or reject the pack)."""
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        org = self.get_object()
+        decision = (request.data.get("status") or "verified").strip().lower()
+        if decision in ("verified", "approve", "approved"):
+            if not org.documents.exists() and not request.data.get("force"):
+                return Response(
+                    {"detail": "No corporate documents uploaded. Upload files or pass force=1."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            org.documents.filter(status=OrganizationDocument.Status.PENDING).update(
+                status=OrganizationDocument.Status.APPROVED,
+                verified_by=request.user,
+                verified_at=timezone.now(),
+            )
+            org.docs_verification_status = Organization.DocsVerificationStatus.VERIFIED
+            org.docs_verified_at = timezone.now()
+            org.docs_verified_by = request.user
+            org.docs_rejection_reason = ""
+        elif decision in ("rejected", "reject"):
+            org.docs_verification_status = Organization.DocsVerificationStatus.REJECTED
+            org.docs_rejection_reason = (request.data.get("reason") or "Corporate documents rejected").strip()
+            org.documents.filter(status=OrganizationDocument.Status.PENDING).update(
+                status=OrganizationDocument.Status.REJECTED,
+                verified_by=request.user,
+                verified_at=timezone.now(),
+                notes=org.docs_rejection_reason,
+            )
+        else:
+            return Response({"detail": "status must be verified or rejected."}, status=400)
+        org.save()
+        for admin in User.objects.filter(organization=org, role=User.Role.ADMIN):
+            Notification.objects.create(
+                user=admin,
+                message=(
+                    f"Corporate documents {org.docs_verification_status} for {org.name}."
+                    if org.docs_verification_status != Organization.DocsVerificationStatus.REJECTED
+                    else f"Corporate documents rejected: {org.docs_rejection_reason}"
+                ),
+                link="/login",
+            )
         return Response(OrganizationSerializer(org).data)
 
     @action(detail=True, methods=["post"])

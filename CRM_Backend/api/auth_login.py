@@ -109,11 +109,18 @@ class CRMTokenObtainPairSerializer(TokenObtainPairSerializer):
             )
 
         org = getattr(user, "organization", None)
-        if user.role == User.Role.ADMIN and org is not None and getattr(org, "status", None) == "pending":
-            raise AuthenticationFailed(
-                "Company registration is pending Super Admin approval.",
-                code="org_pending",
-            )
+        if user.role == User.Role.ADMIN and org is not None:
+            docs_status = getattr(org, "docs_verification_status", "verified")
+            if getattr(org, "status", None) == "pending":
+                raise AuthenticationFailed(
+                    "Company registration is awaiting Super Admin corporate document verification and approval.",
+                    code="org_pending",
+                )
+            if docs_status not in ("verified",) and getattr(org, "status", None) in ("trial", "active"):
+                raise AuthenticationFailed(
+                    "Corporate documents are not verified yet. Please wait for Super Admin review.",
+                    code="org_docs_pending",
+                )
 
         refresh = RefreshToken.for_user(user)
         self.user = user
