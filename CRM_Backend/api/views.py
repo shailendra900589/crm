@@ -1341,7 +1341,7 @@ class LeadViewSet(viewsets.ModelViewSet):
     queryset = Lead.objects.all()
     permission_classes = [IsAuthenticated]
 
-  def get_queryset(self):
+    def get_queryset(self):
         base = leads_for_user(self.request.user).select_related(
             "merchant", "bdm", "project", "product"
         ).prefetch_related("documents")
