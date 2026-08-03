@@ -474,7 +474,16 @@ export function DashboardView() {
                   )}
                   {submitForm.isSuccess && (
                     <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-                      Form submitted successfully.
+                      Form submitted — saved to database
+                      {submitForm.data?.answer_count != null ? ` (${submitForm.data.answer_count} fields)` : ""}.
+                      {submitForm.data?.verification_work_id ? (
+                        <>
+                          {" "}
+                          <Link href="/verification" className="font-semibold underline">
+                            Open verification desk
+                          </Link>
+                        </>
+                      ) : null}
                     </div>
                   )}
 

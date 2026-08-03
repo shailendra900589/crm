@@ -28,6 +28,7 @@ from .permissions import (
     get_descendant_ids,
     is_admin,
     is_company_admin,
+    is_manager_or_admin,
     is_superadmin,
     leads_for_user,
     project_ids_for_user,
@@ -793,7 +794,18 @@ class AdminDashboardView(APIView):
             .select_related("lead", "assigned_to", "lead__merchant", "lead__project")
             .order_by("scheduled_date")
         )
-        sub_qs = FormSubmission.objects.select_related("lead", "submitted_by", "custom_form").order_by("-submitted_at")
+        sub_qs = FormSubmission.objects.select_related(
+            "lead", "lead__merchant", "lead__project", "lead__bdm", "submitted_by", "custom_form"
+        ).order_by("-submitted_at")
+        # Prefer rows that actually have answers (hide empty shell submissions)
+        if request.user.organization_id and is_company_admin(request.user):
+            oid = request.user.organization_id
+            sub_qs = sub_qs.filter(
+                Q(lead__project__organization_id=oid)
+                | Q(lead__project__organization_id__isnull=True)
+                | Q(lead__bdm__organization_id=oid)
+                | Q(lead__bdm__organization_id__isnull=True)
+            )
         if project_filter:
             visits_qs = visits_qs.filter(lead__project_id=project_filter)
             sub_qs = sub_qs.filter(custom_form__project_id=project_filter)
@@ -1964,6 +1976,14 @@ class LeadViewSet(viewsets.ModelViewSet):
         notify_ids = set(
             User.objects.filter(role=User.Role.ADMIN, is_active_user=True).values_list("id", flat=True)[:10]
         )
+        if request.user.organization_id:
+            notify_ids.update(
+                User.objects.filter(
+                    role=User.Role.ADMIN,
+                    organization_id=request.user.organization_id,
+                    is_active_user=True,
+                ).values_list("id", flat=True)[:20]
+            )
         parent = getattr(lead.bdm, "reports_to", None)
         hops = 0
         while parent is not None and hops < 5:
@@ -1998,7 +2018,11 @@ class LeadViewSet(viewsets.ModelViewSet):
             if request.data.get("remarks"):
                 visit.remarks = request.data["remarks"]
             visit.save()
-        return Response(FormSubmissionSerializer(sub).data)
+
+        payload = FormSubmissionSerializer(sub).data
+        payload["verification_work_id"] = work.id
+        payload["verification_status"] = work.status
+        return Response(payload)
 
 
 class VisitViewSet(viewsets.ModelViewSet):
@@ -2307,6 +2331,57 @@ class AuditLogListView(APIView):
             qs = qs.filter(created_at__date__lte=date_to)
         qs = qs[:200]
         return Response(AuditLogSerializer(qs, many=True).data)
+
+
+class FormSubmissionsRecentView(APIView):
+    """Admin/Manager/TL: latest BDM form fills with answers (for dashboard / verify)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not is_manager_or_admin(request.user) and request.user.role != User.Role.OPS:
+            raise PermissionDenied("Not allowed.")
+        from .permissions import verification_works_for_user
+
+        qs = FormSubmission.objects.select_related(
+            "lead", "lead__merchant", "lead__project", "lead__bdm", "submitted_by", "custom_form"
+        ).order_by("-submitted_at")
+
+        if is_company_admin(request.user) and request.user.organization_id:
+            oid = request.user.organization_id
+            qs = qs.filter(
+                Q(lead__project__organization_id=oid)
+                | Q(lead__project__organization_id__isnull=True)
+                | Q(lead__bdm__organization_id=oid)
+                | Q(lead__bdm__organization_id__isnull=True)
+            )
+        elif request.user.role in (User.Role.MANAGER, User.Role.TL):
+            ids = get_descendant_ids(request.user)
+            ids.add(request.user.id)
+            qs = qs.filter(Q(submitted_by_id__in=ids) | Q(lead__bdm_id__in=ids))
+        elif request.user.role == User.Role.OPS:
+            lead_ids = verification_works_for_user(request.user).values_list("lead_id", flat=True)
+            qs = qs.filter(lead_id__in=lead_ids)
+
+        project = request.query_params.get("project")
+        if project:
+            qs = qs.filter(custom_form__project_id=project)
+
+        limit = min(int(request.query_params.get("limit") or 30), 100)
+        rows = FormSubmissionSerializer(qs[:limit], many=True).data
+        # Attach open verification work id when present
+        from .models import VerificationWork
+
+        lead_ids = [r["lead"] for r in rows]
+        works = {
+            w.lead_id: w.id
+            for w in VerificationWork.objects.filter(
+                lead_id__in=lead_ids, status__in=["open", "reopened", "assigned", "in_progress"]
+            )
+        }
+        for r in rows:
+            r["verification_work_id"] = works.get(r["lead"])
+        return Response({"count": len(rows), "results": rows})
 
 
 class HealthView(APIView):

@@ -5,62 +5,46 @@ from __future__ import annotations
 import re
 
 from django.utils import timezone
+from django.utils.text import slugify
 
 from .models import CustomForm, FormSubmission, Lead, LeadDocument
-from .permissions import effective_form_schema
 
-# Legacy demo seed values that show up when Admin renames GST/Business Type labels
-_SEED_GST_RE = re.compile(r"^GST\d+000$", re.I)
-_SEED_JUNK_KEYS = {
-    "gst_number",
-    "business_type",
-    "pending_amount",
-    "amount_collected",
-    "gst_certificate",
-    "annual_revenue",
-}
+# Only exact demo seed patterns — never wipe real BDM answers
+_SEED_GST_RE = re.compile(r"^GST\d{1,4}000$", re.I)
 
 
 def is_seed_junk_value(field_id: str, value) -> bool:
-    """True for demo seed placeholders like GST4000 / Retail."""
+    """True only for classic demo placeholders (GST4000 / Retail on seed fields)."""
     if value in (None, "", [], {}):
         return False
     fid = (field_id or "").lower()
     s = str(value).strip()
-    if fid in ("gst_number", "gst") and _SEED_GST_RE.match(s):
-        return True
-    if fid in ("business_type", "business") and s.lower() == "retail":
-        return True
-    # Renamed labels still using old seed values
+    # Exact seed GST pattern only (GST1000, GST4000, …) — not real GSTINs
     if _SEED_GST_RE.match(s):
         return True
-    if fid.endswith("mobile") or "mobile" in fid or "phone" in fid:
-        if s.lower() == "retail":
-            return True
-    if ("merchant" in fid or "name" in fid) and _SEED_GST_RE.match(s):
+    # Seed business_type default
+    if fid in ("business_type", "business") and s.lower() == "retail":
+        return True
+    # Mobile/phone field wrongly holding seed "Retail"
+    if ("mobile" in fid or "phone" in fid) and s.lower() == "retail":
         return True
     return False
 
 
 def scrub_seed_form_junk(lead: Lead, *, sync_submission: bool = True) -> bool:
     """
-    Remove legacy seed answers (GST4000, Retail, demo money) from lead.custom_data
-    and matching FormSubmission so BDM form starts clean / shows real submits only.
+    Remove ONLY demo seed placeholder values from lead.custom_data.
+    Never deletes a key just because it is named gst_number/business_type —
+    Amazon forms reuse those field_ids with real Merchant Name / Mobile data.
     """
     data = dict(lead.custom_data or {})
     if not data:
         return False
     changed = False
     for key in list(data.keys()):
-        val = data.get(key)
-        if key in _SEED_JUNK_KEYS or is_seed_junk_value(key, val):
-            # Only strip classic seed money when clearly demo amounts on seed keys
-            if key in ("pending_amount", "amount_collected", "annual_revenue") and key in _SEED_JUNK_KEYS:
-                data.pop(key, None)
-                changed = True
-            elif is_seed_junk_value(key, val) or key in ("gst_number", "business_type", "gst_certificate"):
-                data.pop(key, None)
-                changed = True
+        if is_seed_junk_value(key, data.get(key)):
+            data.pop(key, None)
+            changed = True
     if not changed:
         return False
     lead.custom_data = data
@@ -79,23 +63,57 @@ def project_form_for_lead(lead: Lead) -> CustomForm | None:
     return form
 
 
+def _normalize_answers_to_field_ids(answers: dict | None, schema: list) -> dict:
+    """Map answers keyed by label / slug back onto schema field_ids."""
+    if not answers:
+        return {}
+    by_id = {f.get("field_id"): f for f in schema if f.get("field_id")}
+    by_label = {}
+    by_slug = {}
+    for f in schema:
+        fid = f.get("field_id")
+        if not fid:
+            continue
+        label = (f.get("label") or "").strip()
+        if label:
+            by_label[label.lower()] = fid
+        by_slug[slugify(label) or fid] = fid
+        by_slug[fid.lower()] = fid
+
+    out = {}
+    for key, val in answers.items():
+        if val in (None, ""):
+            continue
+        k = str(key)
+        if k in by_id:
+            out[k] = val
+            continue
+        fid = by_label.get(k.lower()) or by_slug.get(slugify(k)) or by_slug.get(k.lower())
+        if fid:
+            out[fid] = val
+        else:
+            # Keep unknown keys (won't hurt); sync will filter to schema when possible
+            out[k] = val
+    return out
+
+
 def merge_form_answers(lead: Lead, answers: dict | None, form: CustomForm | None = None) -> dict:
-    """Merge incoming answers with existing custom_data; preserve prior file URLs; drop seed junk."""
+    """Merge incoming answers with existing custom_data; preserve prior file URLs; drop seed junk only."""
     form = form or project_form_for_lead(lead)
     schema = (form.schema if form else None) or []
     schema_ids = {f.get("field_id") for f in schema if f.get("field_id")}
 
+    incoming = _normalize_answers_to_field_ids(answers, schema)
     merged = dict(lead.custom_data or {})
-    # Drop legacy seed junk before merge so GST4000/Retail never stick on renamed fields
-    for key in list(merged.keys()):
-        if is_seed_junk_value(key, merged.get(key)) or (
-            key in _SEED_JUNK_KEYS and key not in (answers or {})
-        ):
-            # Keep non-junk user values on seed keys; strip only junk-looking values
-            if is_seed_junk_value(key, merged.get(key)):
-                merged.pop(key, None)
 
-    merged.update(answers or {})
+    # Strip only placeholder junk from existing data
+    for key in list(merged.keys()):
+        if is_seed_junk_value(key, merged.get(key)):
+            merged.pop(key, None)
+
+    merged.update(incoming)
+
+    # Preserve prior file URLs if omitted on re-submit
     for f in schema:
         if f.get("type") == "file" and f.get("field_id"):
             fid = f["field_id"]
@@ -104,19 +122,33 @@ def merge_form_answers(lead: Lead, answers: dict | None, form: CustomForm | None
                 if not is_seed_junk_value(fid, prev):
                     merged[fid] = prev
 
-    # Prefer schema keys for persistence clarity (keep extras that are files/urls too)
+    # Drop leftover seed junk after merge
+    for key in list(merged.keys()):
+        if is_seed_junk_value(key, merged.get(key)):
+            merged.pop(key, None)
+
+    # If schema is known, keep schema fields (+ media URLs). Never drop non-empty user answers
+    # that match schema. Orphan keys outside schema are kept if they look like real fills
+    # (helps when Admin recently changed field_ids).
     if schema_ids:
         cleaned = {}
         for k, v in merged.items():
-            if k in schema_ids or (isinstance(v, str) and ("/media/" in v or v.startswith("http"))):
-                if is_seed_junk_value(k, v):
-                    continue
+            if v in (None, "", [], {}):
+                continue
+            if is_seed_junk_value(k, v):
+                continue
+            if k in schema_ids:
+                cleaned[k] = v
+            elif isinstance(v, str) and ("/media/" in v or v.startswith("http")):
+                cleaned[k] = v
+            elif k in incoming:
+                # Explicitly submitted — keep even if schema drifted
                 cleaned[k] = v
         merged = cleaned
     return merged
 
 
-def answer_preview(answers: dict | None, schema: list | None = None, limit: int = 6) -> list[dict]:
+def answer_preview(answers: dict | None, schema: list | None = None, limit: int = 8) -> list[dict]:
     """Human-readable snippets for dashboards / verification desk."""
     answers = answers or {}
     schema = schema or []
@@ -126,9 +158,14 @@ def answer_preview(answers: dict | None, schema: list | None = None, limit: int 
     for key, val in answers.items():
         if val in (None, "", [], {}):
             continue
+        if is_seed_junk_value(key, val):
+            continue
         label = labels.get(key) or str(key).replace("_", " ").title()
         ftype = types.get(key)
-        if ftype == "file" or (isinstance(val, str) and (val.startswith("http://") or val.startswith("https://") or val.startswith("/media/"))):
+        if ftype == "file" or (
+            isinstance(val, str)
+            and (val.startswith("http://") or val.startswith("https://") or val.startswith("/media/"))
+        ):
             display = "File uploaded"
         elif isinstance(val, (list, dict)):
             display = str(val)[:80]
@@ -158,7 +195,6 @@ def sync_lead_form_data(
     """
     form = form or project_form_for_lead(lead)
     if not form:
-        # Still persist custom_data if answers provided
         if answers is not None:
             lead.custom_data = merge_form_answers(lead, answers, None)
             lead.save(update_fields=["custom_data", "updated_at"])

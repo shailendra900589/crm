@@ -137,12 +137,11 @@ function isSeedJunkValue(fieldId: string, value: unknown): boolean {
   if (value == null || value === "") return false;
   const fid = fieldId.toLowerCase();
   const s = String(value).trim();
-  if (/^GST\d+000$/i.test(s)) return true;
-  if ((fid.includes("mobile") || fid.includes("phone") || fid === "business_type") && s.toLowerCase() === "retail") {
+  // Exact demo seed only — never hide real GSTIN / user text
+  if (/^GST\d{1,4}000$/i.test(s)) return true;
+  if ((fid === "business_type" || fid.includes("mobile") || fid.includes("phone")) && s.toLowerCase() === "retail") {
     return true;
   }
-  if (fid === "gst_number" && /^GST/i.test(s)) return true;
-  if (fid === "business_type" && s.toLowerCase() === "retail") return true;
   return false;
 }
 

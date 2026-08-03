@@ -70,6 +70,15 @@ export function AdminPanel() {
     enabled: !!drillManager,
   });
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: api.projects });
+  const { data: recentForms } = useQuery({
+    queryKey: ["form-submissions-recent", filters.project || "all"],
+    queryFn: () =>
+      api.formSubmissionsRecent({
+        project: filters.project ? Number(filters.project) : undefined,
+        limit: 12,
+      }),
+    refetchInterval: 15_000,
+  });
   const { data: products } = useQuery({
     queryKey: ["products", filters.project || "all"],
     queryFn: () => api.products(filters.project ? Number(filters.project) : undefined),
@@ -103,6 +112,11 @@ export function AdminPanel() {
   );
 
   const scopeLabel = stats?.filter_summary?.project_name || (filters.project ? "Filtered" : "All projects");
+  const recentSubmissions =
+    (stats?.recent_submissions || []).length > 0
+      ? stats!.recent_submissions
+      : recentForms?.results || [];
+  const pendingVerifications = stats?.pending_verifications || [];
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-4">
@@ -487,16 +501,16 @@ export function AdminPanel() {
                 </SideCard>
               )}
 
-              {(stats?.pending_verifications || []).length > 0 && (
+              {(pendingVerifications || []).length > 0 && (
                 <SideCard
                   title="Needs verification"
                   icon={ClipboardCheck}
-                  badge={stats?.pending_verifications?.length}
+                  badge={pendingVerifications?.length}
                   actionHref="/verification"
                   actionLabel="Desk"
                 >
                   <div className="max-h-64 space-y-1.5 overflow-y-auto">
-                    {stats!.pending_verifications!.map((w) => (
+                    {pendingVerifications.map((w) => (
                       <Link
                         key={w.id}
                         href={`/verification`}
@@ -521,19 +535,19 @@ export function AdminPanel() {
                 </SideCard>
               )}
 
-              {(stats?.recent_submissions || []).length > 0 && (
+              {recentSubmissions.length > 0 && (
                 <SideCard
                   title="Recent submissions"
                   icon={History}
-                  badge={stats?.recent_submissions?.length}
+                  badge={recentSubmissions.length}
                   actionHref="/leads"
                   actionLabel="Leads"
                 >
                   <div className="max-h-56 space-y-1 overflow-y-auto">
-                    {stats!.recent_submissions.map((s) => (
+                    {recentSubmissions.map((s) => (
                       <Link
                         key={s.id}
-                        href={`/leads?lead=${s.lead}`}
+                        href={(s as { verification_work_id?: number }).verification_work_id ? "/verification" : `/leads?lead=${s.lead}`}
                         className="group flex items-start gap-2 rounded-lg border border-slate-700/80 bg-slate-950/50 px-2.5 py-2 transition hover:border-sky-500/40 hover:bg-slate-950"
                       >
                         <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-500" />

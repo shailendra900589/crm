@@ -400,11 +400,21 @@ export const api = {
     request<Lead>(`/api/leads/${id}/log-call/`, { method: "POST", body: JSON.stringify(data) }),
   reassignLead: (id: number, data: { bdm: number; notes?: string }) =>
     request<Lead>(`/api/leads/${id}/reassign/`, { method: "PATCH", body: JSON.stringify(data) }),
+  formSubmissionsRecent: (opts?: { project?: number; limit?: number }) =>
+    request<{ count: number; results: (FormSubmission & { verification_work_id?: number | null })[] }>(
+      `/api/form-submissions/recent/${buildQuery({
+        project: opts?.project ? String(opts.project) : undefined,
+        limit: opts?.limit ? String(opts.limit) : undefined,
+      })}`,
+    ),
   submitForm: (id: number, answers: Record<string, unknown>, opts?: { visit_id?: number; remarks?: string }) =>
-    request<FormSubmission>(`/api/leads/${id}/form_submission/`, {
-      method: "POST",
-      body: JSON.stringify({ answers, visit_id: opts?.visit_id, remarks: opts?.remarks }),
-    }),
+    request<FormSubmission & { verification_work_id?: number; verification_status?: string }>(
+      `/api/leads/${id}/form_submission/`,
+      {
+        method: "POST",
+        body: JSON.stringify({ answers, visit_id: opts?.visit_id, remarks: opts?.remarks }),
+      },
+    ),
   uploadDocuments: (id: number, form: FormData) =>
     request<LeadDocument>(`/api/leads/${id}/upload_documents/`, { method: "POST", body: form }),
   uploadFormFile: async (leadId: number, fieldId: string, file: File) => {
