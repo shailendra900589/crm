@@ -153,11 +153,6 @@ export function DashboardView() {
     if (activeVisit) setVisitModalRemarks("");
   }, [activeVisit]);
 
-  useEffect(() => {
-    const lead = leads.find((l) => l.id === selectedLead);
-    setFormData(valuesForSchema(fillSchema, lead?.custom_data as Record<string, unknown>));
-  }, [selectedLead, leads, fillSchema]);
-
   const submitForm = useMutation({
     mutationFn: () =>
       api.submitForm(selectedLead!, formData, {
@@ -172,6 +167,7 @@ export function DashboardView() {
       qc.invalidateQueries({ queryKey: ["verification-works"] });
       qc.invalidateQueries({ queryKey: ["verification-summary"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["form-submissions-recent"] });
       if (sub?.answers) setFormData(valuesForSchema(fillSchema, sub.answers));
       setRemarks("");
     },
@@ -191,11 +187,18 @@ export function DashboardView() {
       qc.invalidateQueries({ queryKey: ["verification-works"] });
       qc.invalidateQueries({ queryKey: ["verification-summary"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["form-submissions-recent"] });
       if (sub?.answers) setVisitModalFormData(valuesForSchema(fillSchema, sub.answers));
       setActiveVisit(null);
       setVisitModalRemarks("");
     },
   });
+
+  useEffect(() => {
+    const lead = leads.find((l) => l.id === selectedLead);
+    setFormData(valuesForSchema(fillSchema, lead?.custom_data as Record<string, unknown>));
+    submitForm.reset();
+  }, [selectedLead, leads, fillSchema]);
 
   const assignVisit = useMutation({
     mutationFn: () =>

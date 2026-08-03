@@ -52,23 +52,39 @@ export function LeadsView() {
   const [exporting, setExporting] = useState(false);
   const [mobileCheck, setMobileCheck] = useState("");
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me });
+  const isOrgAdmin = me?.role === "Admin" || me?.role === "SuperAdmin";
   const canReassign = !!me && (me.role === "Admin" || me.role === "Manager" || me.role === "TL");
   const { data: assignees = [] } = useQuery({
     queryKey: ["users-reassign"],
     queryFn: () => api.users(),
     enabled: canReassign,
   });
+  const { data: allProjects = [] } = useQuery({
+    queryKey: ["projects"],
+    queryFn: api.projects,
+  });
 
   useEffect(() => {
     if (params.get("overdue") === "1") setOverdueFilter(true);
   }, [params]);
 
+  // Admin: default to ALL projects so list never goes blank after add on another project
+  useEffect(() => {
+    if (!me) return;
+    if (me.role === "Admin" || me.role === "SuperAdmin") {
+      setLocalProjectId("");
+    } else {
+      setLocalProjectId(getProjectId() || "");
+    }
+  }, [me?.role]);
+
   useEffect(() => onProjectChange((id) => {
+    if (me?.role === "Admin" || me?.role === "SuperAdmin") return;
     setLocalProjectId(id);
     setPage(1);
     setProductFilter("");
     setCompanyFilter("");
-  }), []);
+  }), [me?.role]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -87,10 +103,12 @@ export function LeadsView() {
     return () => clearTimeout(t);
   }, [form.merchant_mobile, modal]);
 
+  const createProjectId = Number(form.project) || Number(projectId) || Number(getProjectId()) || 0;
+
   const { data: duplicateCheck } = useQuery({
-    queryKey: ["check-duplicate", projectId, mobileCheck],
-    queryFn: () => api.checkDuplicate({ mobile: mobileCheck, project: Number(projectId) || undefined }),
-    enabled: modal === "add" && mobileCheck.replace(/\D/g, "").length >= 10 && !!projectId,
+    queryKey: ["check-duplicate", createProjectId, mobileCheck],
+    queryFn: () => api.checkDuplicate({ mobile: mobileCheck, project: createProjectId || undefined }),
+    enabled: modal === "add" && mobileCheck.replace(/\D/g, "").length >= 10 && !!createProjectId,
   });
 
   const { data, isLoading } = useQuery({
@@ -142,6 +160,7 @@ export function LeadsView() {
     setSearchInput("");
     setSearchQ("");
     setPage(1);
+    if (isOrgAdmin) setLocalProjectId("");
   };
 
   const exportOpts = {
@@ -153,9 +172,30 @@ export function LeadsView() {
   };
 
   const create = useMutation({
-    mutationFn: (opts?: { force?: boolean }) =>
-      api.createLead({ ...form, project: Number(getProjectId()), force: opts?.force }),
-    onSuccess: () => { invalidate(); setModal(null); setForm(emptyForm()); },
+    mutationFn: (opts?: { force?: boolean }) => {
+      const pid = Number(form.project) || Number(projectId) || Number(getProjectId()) || 0;
+      if (!pid) throw new Error("Select a project before adding a lead");
+      return api.createLead({ ...form, project: pid, force: opts?.force });
+    },
+    onSuccess: (lead) => {
+      invalidate();
+      setModal(null);
+      setForm(emptyForm());
+      setSelected(lead);
+      setPage(1);
+      // Stay on all-projects for Admin so the new lead stays visible
+      if (isOrgAdmin) {
+        setLocalProjectId("");
+      } else if (lead.project) {
+        setLocalProjectId(String(lead.project));
+      }
+      // Deep-link friendly
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("lead", String(lead.id));
+        window.history.replaceState({}, "", url.toString());
+      }
+    },
   });
 
   const handleCreateLead = () => {
@@ -211,7 +251,12 @@ export function LeadsView() {
   });
 
   const openAdd = () => {
-    setForm(emptyForm());
+    const defaultPid =
+      Number(projectId) ||
+      Number(getProjectId()) ||
+      (allProjects.find((p) => p.is_active)?.id ?? allProjects[0]?.id) ||
+      0;
+    setForm({ ...emptyForm(), project: defaultPid });
     setModal("add");
   };
 
@@ -370,6 +415,21 @@ export function LeadsView() {
               <span className="mr-1 inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                 <Filter className="h-3 w-3" /> Filter
               </span>
+              <select
+                value={projectId}
+                onChange={(e) => {
+                  setLocalProjectId(e.target.value);
+                  setPage(1);
+                  setProductFilter("");
+                  setCompanyFilter("");
+                }}
+                className={selectCls}
+              >
+                <option value="">{isOrgAdmin ? "All projects" : "Project"}</option>
+                {allProjects.filter((p) => p.is_active).map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
               <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }} className={selectCls}>
                 <option value="">Status</option>
                 {LEAD_STATUSES.map((s) => (
@@ -607,6 +667,20 @@ export function LeadsView() {
             ) : (
               <div className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
+                  {modal === "add" && (
+                    <Field label="Project *">
+                      <select
+                        value={form.project || ""}
+                        onChange={(e) => setForm({ ...form, project: Number(e.target.value) || 0 })}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-blue-500"
+                      >
+                        <option value="">Select project…</option>
+                        {allProjects.filter((p) => p.is_active).map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </Field>
+                  )}
                   <Field label="Merchant Name *">
                     <Input value={form.merchant_name} onChange={(e) => setForm({ ...form, merchant_name: e.target.value })} />
                   </Field>
@@ -684,7 +758,7 @@ export function LeadsView() {
                   })}
                   saving={create.isPending || update.isPending}
                   label={modal === "add" ? "Add Lead" : "Save Changes"}
-                  disabled={modal === "add" && (!form.merchant_name || !form.merchant_mobile)}
+                  disabled={modal === "add" && (!form.merchant_name || !form.merchant_mobile || !form.project)}
                 />
               </div>
             )}
@@ -732,6 +806,7 @@ function LeadDetailModal({
       qc.invalidateQueries({ queryKey: ["visits"] });
       qc.invalidateQueries({ queryKey: ["verification-works"] });
       qc.invalidateQueries({ queryKey: ["verification-summary"] });
+      qc.invalidateQueries({ queryKey: ["form-submissions-recent"] });
       if (sub?.answers) setFormData(valuesForSchema(fillSchema, sub.answers));
     },
   });
@@ -755,7 +830,8 @@ function LeadDetailModal({
 
   useEffect(() => {
     setFormData(valuesForSchema(fillSchema, l?.custom_data as Record<string, unknown>));
-  }, [l, fillSchema]);
+    submitForm.reset();
+  }, [l?.id, fillSchema]);
 
   useEffect(() => {
     if (lead) setTab("profile");

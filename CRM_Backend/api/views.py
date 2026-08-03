@@ -1341,11 +1341,30 @@ class LeadViewSet(viewsets.ModelViewSet):
     queryset = Lead.objects.all()
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        qs = filter_by_project(
-            self.request,
-            leads_for_user(self.request.user).select_related("merchant", "bdm", "project", "product").prefetch_related("documents"),
-        )
+  def get_queryset(self):
+        base = leads_for_user(self.request.user).select_related(
+            "merchant", "bdm", "project", "product"
+        ).prefetch_related("documents")
+        # Detail / form actions must not be blanked by a stale ?project= filter
+        detail_actions = {
+            "retrieve",
+            "update",
+            "partial_update",
+            "destroy",
+            "form_submission",
+            "upload_documents",
+            "upload_form_file",
+            "verify_documents",
+            "download_document",
+            "follow_up",
+            "log_call",
+            "reassign",
+            "activity",
+        }
+        if getattr(self, "action", None) in detail_actions:
+            return base.order_by("-updated_at")
+
+        qs = filter_by_project(self.request, base)
         status_filter = self.request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)

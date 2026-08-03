@@ -124,7 +124,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [user, pathname, router]);
 
   useEffect(() => {
-    if (!projects?.length) return;
+    if (!projects?.length || !user) return;
+    // Org Admin / Super Admin work across projects — do not force a shell project into localStorage
+    if (user.role === "Admin" || user.role === "SuperAdmin") {
+      const saved = getProjectId();
+      if (saved && projects.some((p) => String(p.id) === saved)) {
+        setActiveProject(saved);
+      } else {
+        setActiveProject("");
+      }
+      return;
+    }
     const saved = getProjectId();
     const valid = projects.find((p) => String(p.id) === saved && p.is_active);
     const pick = valid || projects.find((p) => p.is_active) || projects[0];
@@ -133,7 +143,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       setActiveProject(id);
       if (saved !== id) setProjectId(id);
     }
-  }, [projects]);
+  }, [projects, user]);
 
   useEffect(
     () =>
