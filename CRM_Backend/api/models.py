@@ -3,6 +3,29 @@ from django.db import models
 from django.utils import timezone
 
 
+class SubscriptionPackage(models.Model):
+    """Super Admin–defined SaaS package with budget and module entitlements."""
+
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(unique=True)
+    description = models.TextField(blank=True)
+    price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    currency = models.CharField(max_length=8, default="INR")
+    trial_days = models.PositiveIntegerField(default=15)
+    module_keys = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False, help_text="Assigned to new trial companies")
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "price", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.price} {self.currency})"
+
+
 class Organization(models.Model):
     """Tenant / company that owns CRM projects and employees."""
 
@@ -13,6 +36,11 @@ class Organization(models.Model):
         SUSPENDED = "suspended", "Suspended"
         REJECTED = "rejected", "Rejected"
 
+    class PaymentStatus(models.TextChoices):
+        NONE = "none", "No payment"
+        PENDING = "pending", "Payment pending"
+        PAID = "paid", "Paid"
+
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)
     email = models.EmailField()
@@ -22,6 +50,24 @@ class Organization(models.Model):
     plan_label = models.CharField(max_length=120, blank=True, default="Trial")
     trial_ends_at = models.DateTimeField(null=True, blank=True)
     payment_notes = models.TextField(blank=True, help_text="Super Admin payment / commercial notes")
+    package = models.ForeignKey(
+        SubscriptionPackage,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="organizations",
+    )
+    enabled_modules = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Module keys this company may use (Super Admin / package controlled)",
+    )
+    payment_status = models.CharField(
+        max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.NONE, db_index=True
+    )
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    package_assigned_at = models.DateTimeField(null=True, blank=True)
     hrms_connected = models.BooleanField(default=False)
     hrms_company_id = models.CharField(max_length=64, blank=True)
     hrms_api_base_url = models.URLField(blank=True, default="https://hrms.trackbook.co")

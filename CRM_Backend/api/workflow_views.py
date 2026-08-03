@@ -14,7 +14,14 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Lead, LeadDocument, Notification, Organization, Project, VerificationWork
+from .entitlements import (
+    apply_package_to_org,
+    ensure_default_packages,
+    get_default_package,
+    module_catalog_payload,
+    sanitize_modules,
+)
+from .models import Lead, LeadDocument, Notification, Organization, Project, SubscriptionPackage, VerificationWork
 from .permissions import (
     can_assign_verification,
     can_edit_lead_data,
@@ -29,6 +36,7 @@ from .permissions import (
 from .serializers import (
     OrganizationSerializer,
     OrganizationWriteSerializer,
+    SubscriptionPackageSerializer,
     VerificationWorkSerializer,
 )
 
@@ -70,6 +78,8 @@ class RegisterOrganizationView(APIView):
         if User.objects.filter(email=email).exists():
             return Response({"detail": "Email already registered."}, status=status.HTTP_400_BAD_REQUEST)
 
+        pkg = get_default_package()
+        trial_days = (pkg.trial_days if pkg else 15) or 15
         org = Organization.objects.create(
             name=name,
             slug=_unique_slug(name),
@@ -78,8 +88,11 @@ class RegisterOrganizationView(APIView):
             city=city,
             admin_name=admin_name or admin_username,
             status=Organization.Status.PENDING,
-            plan_label="Trial" if want_trial else "Paid pending",
-            trial_ends_at=timezone.now() + timedelta(days=14) if want_trial else None,
+            plan_label=(pkg.name if pkg else "Trial") if want_trial else "Paid pending",
+            trial_ends_at=timezone.now() + timedelta(days=trial_days) if want_trial else None,
+            package=pkg,
+            enabled_modules=sanitize_modules((pkg.module_keys if pkg else None)),
+            payment_status=Organization.PaymentStatus.NONE,
         )
         admin = User.objects.create_user(
             username=admin_username,
@@ -143,6 +156,12 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         """Super Admin KPI snapshot across all tenants."""
         if not is_superadmin(request.user):
             raise PermissionDenied("Only Super Admin.")
+        from .entitlements import ensure_org_entitlements
+
+        ensure_default_packages()
+        for org in Organization.objects.all().iterator():
+            if not org.enabled_modules:
+                ensure_org_entitlements(org)
         qs = Organization.objects.all()
         by_status = {
             row["status"]: row["c"]
@@ -184,6 +203,26 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         User.objects.filter(organization=org, role=User.Role.ADMIN).update(is_active_user=False)
         return Response(OrganizationSerializer(org).data)
 
+    def _apply_package_from_request(self, org, request, *, paid: bool):
+        package_id = request.data.get("package_id")
+        package = None
+        if package_id:
+            package = SubscriptionPackage.objects.filter(id=package_id, is_active=True).first()
+        if package is None:
+            package = org.package or get_default_package()
+        if package:
+            apply_package_to_org(org, package, keep_custom=bool(request.data.get("keep_modules")))
+        if "modules" in request.data:
+            org.enabled_modules = sanitize_modules(request.data.get("modules"))
+        if paid:
+            org.payment_status = Organization.PaymentStatus.PAID
+            org.paid_at = timezone.now()
+            if request.data.get("amount") is not None:
+                org.amount_paid = request.data.get("amount")
+            elif package:
+                org.amount_paid = package.price
+        return org
+
     @action(detail=True, methods=["post"])
     def reactivate(self, request, pk=None):
         if not is_superadmin(request.user):
@@ -191,14 +230,18 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         org = self.get_object()
         mode = (request.data.get("mode") or "active").lower()
         if mode == "trial":
-            days = int(request.data.get("trial_days") or 14)
+            pkg = org.package or get_default_package()
+            days = int(request.data.get("trial_days") or (pkg.trial_days if pkg else 15) or 15)
             org.status = Organization.Status.TRIAL
-            org.plan_label = (request.data.get("plan_label") or org.plan_label or "Trial").strip()
             org.trial_ends_at = timezone.now() + timedelta(days=max(1, days))
+            org.payment_status = Organization.PaymentStatus.NONE
+            self._apply_package_from_request(org, request, paid=False)
+            org.plan_label = (request.data.get("plan_label") or org.plan_label or "Trial").strip()
         else:
             org.status = Organization.Status.ACTIVE
-            org.plan_label = (request.data.get("plan_label") or org.plan_label or "Paid").strip()
             org.trial_ends_at = None
+            self._apply_package_from_request(org, request, paid=True)
+            org.plan_label = (request.data.get("plan_label") or org.plan_label or "Paid").strip()
         if "payment_notes" in request.data:
             org.payment_notes = request.data.get("payment_notes") or ""
         org.is_public = bool(request.data.get("is_public", True))
@@ -214,19 +257,27 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only Super Admin.")
         org = self.get_object()
         mode = (request.data.get("mode") or "trial").lower()  # trial | active
-        days = int(request.data.get("trial_days") or 14)
+        pkg = None
+        if request.data.get("package_id"):
+            pkg = SubscriptionPackage.objects.filter(id=request.data["package_id"], is_active=True).first()
+        if pkg is None:
+            pkg = get_default_package()
+        days = int(request.data.get("trial_days") or (pkg.trial_days if pkg else 15) or 15)
         plan = (request.data.get("plan_label") or "").strip()
         payment_notes = (request.data.get("payment_notes") or "").strip()
         publish = bool(request.data.get("is_public", True))
 
         if mode == "active":
             org.status = Organization.Status.ACTIVE
-            org.plan_label = plan or "Paid"
             org.trial_ends_at = None
+            self._apply_package_from_request(org, request, paid=True)
+            org.plan_label = plan or (pkg.name if pkg else "Paid")
         else:
             org.status = Organization.Status.TRIAL
-            org.plan_label = plan or "Trial"
             org.trial_ends_at = timezone.now() + timedelta(days=max(1, days))
+            org.payment_status = Organization.PaymentStatus.NONE
+            self._apply_package_from_request(org, request, paid=False)
+            org.plan_label = plan or (pkg.name if pkg else "Trial")
         if payment_notes:
             org.payment_notes = payment_notes
         org.is_public = publish
@@ -268,7 +319,26 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         if "payment_notes" in request.data:
             org.payment_notes = request.data.get("payment_notes") or ""
         if "trial_days" in request.data:
-            org.trial_ends_at = timezone.now() + timedelta(days=int(request.data["trial_days"]))
+            org.trial_ends_at = timezone.now() + timedelta(days=max(0, int(request.data["trial_days"])))
+        if "delta_days" in request.data:
+            delta = int(request.data["delta_days"])
+            base = org.trial_ends_at or timezone.now()
+            if base < timezone.now() and delta > 0:
+                base = timezone.now()
+            org.trial_ends_at = base + timedelta(days=delta)
+            if org.status == Organization.Status.ACTIVE and delta != 0:
+                pass
+            elif org.status in (Organization.Status.TRIAL, Organization.Status.SUSPENDED, Organization.Status.ACTIVE):
+                if org.status != Organization.Status.ACTIVE:
+                    org.status = Organization.Status.TRIAL
+        if "package_id" in request.data or "modules" in request.data:
+            paid = status_val == Organization.Status.ACTIVE or org.status == Organization.Status.ACTIVE
+            self._apply_package_from_request(org, request, paid=paid and request.data.get("mark_paid", paid))
+        if request.data.get("mark_paid") or status_val == Organization.Status.ACTIVE:
+            org.payment_status = Organization.PaymentStatus.PAID
+            org.paid_at = org.paid_at or timezone.now()
+            if request.data.get("amount") is not None:
+                org.amount_paid = request.data.get("amount")
         if "is_public" in request.data:
             org.is_public = bool(request.data.get("is_public"))
         if "hrms_connected" in request.data:
@@ -279,6 +349,125 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             org.hrms_api_base_url = str(request.data.get("hrms_api_base_url") or org.hrms_api_base_url)
         org.save()
         return Response(OrganizationSerializer(org).data)
+
+    @action(detail=True, methods=["post"])
+    def adjust_trial(self, request, pk=None):
+        """Increase or decrease trial by delta_days (relative to current end)."""
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        org = self.get_object()
+        if "delta_days" not in request.data and "trial_days" not in request.data:
+            return Response(
+                {"detail": "Provide delta_days (e.g. +5 / -3) or trial_days (absolute from now)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if "delta_days" in request.data:
+            delta = int(request.data["delta_days"])
+            base = org.trial_ends_at or timezone.now()
+            if base < timezone.now() and delta > 0:
+                base = timezone.now()
+            org.trial_ends_at = base + timedelta(days=delta)
+        else:
+            org.trial_ends_at = timezone.now() + timedelta(days=max(0, int(request.data["trial_days"])))
+        if org.status != Organization.Status.ACTIVE:
+            org.status = Organization.Status.TRIAL
+        if "payment_notes" in request.data:
+            org.payment_notes = request.data.get("payment_notes") or ""
+        org.save()
+        return Response(OrganizationSerializer(org).data)
+
+    @action(detail=True, methods=["post"])
+    def set_modules(self, request, pk=None):
+        """Super Admin override of modules this company can open."""
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        org = self.get_object()
+        org.enabled_modules = sanitize_modules(request.data.get("modules") or [])
+        if request.data.get("package_id"):
+            pkg = SubscriptionPackage.objects.filter(id=request.data["package_id"]).first()
+            if pkg:
+                org.package = pkg
+                org.plan_label = pkg.name
+                org.package_assigned_at = timezone.now()
+        org.save()
+        return Response(OrganizationSerializer(org).data)
+
+    @action(detail=True, methods=["post"])
+    def record_payment(self, request, pk=None):
+        """Mark successful payment → unlock subscribed package modules."""
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        org = self.get_object()
+        self._apply_package_from_request(org, request, paid=True)
+        org.status = Organization.Status.ACTIVE
+        org.trial_ends_at = None
+        org.payment_status = Organization.PaymentStatus.PAID
+        org.paid_at = timezone.now()
+        if request.data.get("amount") is not None:
+            org.amount_paid = request.data.get("amount")
+        elif org.package_id and org.amount_paid is None:
+            org.amount_paid = org.package.price
+        if "payment_notes" in request.data:
+            org.payment_notes = request.data.get("payment_notes") or ""
+        if "plan_label" in request.data:
+            org.plan_label = (request.data.get("plan_label") or org.plan_label).strip()
+        org.is_public = bool(request.data.get("is_public", True))
+        org.approved_by = request.user
+        org.approved_at = timezone.now()
+        org.save()
+        User.objects.filter(organization=org, role=User.Role.ADMIN).update(is_active_user=True, is_active=True)
+        return Response(OrganizationSerializer(org).data)
+
+
+class SubscriptionPackageViewSet(viewsets.ModelViewSet):
+    """Super Admin CRUD for subscription packages (budget + modules)."""
+
+    queryset = SubscriptionPackage.objects.all()
+    serializer_class = SubscriptionPackageSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        ensure_default_packages()
+
+    def get_queryset(self):
+        if not is_superadmin(self.request.user):
+            return SubscriptionPackage.objects.none()
+        qs = SubscriptionPackage.objects.all()
+        if self.request.query_params.get("active") == "1":
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        pkg = self.get_object()
+        if pkg.is_default:
+            return Response({"detail": "Cannot delete the default package."}, status=status.HTTP_400_BAD_REQUEST)
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=["get"])
+    def module_catalog(self, request):
+        if not is_superadmin(request.user):
+            raise PermissionDenied("Only Super Admin.")
+        ensure_default_packages()
+        return Response({"modules": module_catalog_payload()})
 
     @action(detail=True, methods=["post"], url_path="sync-hrms-employees")
     def sync_hrms_employees(self, request, pk=None):

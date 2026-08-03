@@ -15,6 +15,7 @@ from .models import (
     Product,
     Project,
     SalesTarget,
+    SubscriptionPackage,
     Team,
     VerificationWork,
 )
@@ -551,12 +552,70 @@ class SalesTargetSerializer(serializers.ModelSerializer):
         return value
 
 
+class SubscriptionPackageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubscriptionPackage
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "description",
+            "price",
+            "currency",
+            "trial_days",
+            "module_keys",
+            "is_active",
+            "is_default",
+            "sort_order",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["created_at", "updated_at"]
+
+    def validate_module_keys(self, value):
+        from .entitlements import sanitize_modules
+
+        return sanitize_modules(value or [])
+
+    def create(self, validated_data):
+        from django.utils.text import slugify
+
+        from .entitlements import sanitize_modules
+
+        if not validated_data.get("slug"):
+            base = slugify(validated_data.get("name") or "package")[:40] or "package"
+            slug = base
+            n = 1
+            while SubscriptionPackage.objects.filter(slug=slug).exists():
+                n += 1
+                slug = f"{base}-{n}"
+            validated_data["slug"] = slug
+        validated_data["module_keys"] = sanitize_modules(validated_data.get("module_keys"))
+        if validated_data.get("is_default"):
+            SubscriptionPackage.objects.filter(is_default=True).update(is_default=False)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        from .entitlements import sanitize_modules
+
+        if "module_keys" in validated_data:
+            validated_data["module_keys"] = sanitize_modules(validated_data.get("module_keys"))
+        if validated_data.get("is_default"):
+            SubscriptionPackage.objects.filter(is_default=True).exclude(pk=instance.pk).update(is_default=False)
+        return super().update(instance, validated_data)
+
+
 class OrganizationSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     approved_by_name = serializers.SerializerMethodField()
     user_count = serializers.SerializerMethodField()
     project_count = serializers.SerializerMethodField()
     access_allowed = serializers.BooleanField(source="is_access_allowed", read_only=True)
+    package_name = serializers.CharField(source="package.name", read_only=True, allow_null=True)
+    package_price = serializers.DecimalField(
+        source="package.price", max_digits=12, decimal_places=2, read_only=True, allow_null=True
+    )
+    payment_status_display = serializers.CharField(source="get_payment_status_display", read_only=True)
 
     class Meta:
         model = Organization
@@ -572,6 +631,15 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "plan_label",
             "trial_ends_at",
             "payment_notes",
+            "package",
+            "package_name",
+            "package_price",
+            "enabled_modules",
+            "payment_status",
+            "payment_status_display",
+            "amount_paid",
+            "paid_at",
+            "package_assigned_at",
             "hrms_connected",
             "hrms_company_id",
             "hrms_api_base_url",
@@ -585,7 +653,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             "project_count",
             "access_allowed",
         ]
-        read_only_fields = ["slug", "created_at", "approved_by", "approved_at"]
+        read_only_fields = ["slug", "created_at", "approved_by", "approved_at", "paid_at", "package_assigned_at"]
 
     def get_approved_by_name(self, obj):
         if not obj.approved_by_id:
@@ -621,6 +689,8 @@ class OrganizationWriteSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         from django.utils.text import slugify
 
+        from .entitlements import apply_package_to_org, get_default_package, sanitize_modules
+
         name = validated_data.get("name") or "Company"
         base = slugify(name)[:40] or "company"
         slug = base
@@ -629,7 +699,21 @@ class OrganizationWriteSerializer(serializers.ModelSerializer):
             n += 1
             slug = f"{base}-{n}"
         validated_data["slug"] = slug
-        return super().create(validated_data)
+        org = super().create(validated_data)
+        pkg = get_default_package()
+        if pkg:
+            apply_package_to_org(org, pkg)
+            if org.status == Organization.Status.TRIAL and not org.trial_ends_at:
+                from datetime import timedelta
+
+                from django.utils import timezone
+
+                org.trial_ends_at = timezone.now() + timedelta(days=max(1, pkg.trial_days or 15))
+            org.save()
+        elif not org.enabled_modules:
+            org.enabled_modules = sanitize_modules([])
+            org.save(update_fields=["enabled_modules"])
+        return org
 
 
 class VerificationWorkSerializer(serializers.ModelSerializer):

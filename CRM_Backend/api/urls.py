@@ -30,7 +30,12 @@ from .views import (
     UserViewSet,
     VisitViewSet,
 )
-from .workflow_views import OrganizationViewSet, RegisterOrganizationView, VerificationWorkViewSet
+from .workflow_views import (
+    OrganizationViewSet,
+    RegisterOrganizationView,
+    SubscriptionPackageViewSet,
+    VerificationWorkViewSet,
+)
 
 router = DefaultRouter()
 router.register("projects", ProjectViewSet)
@@ -43,6 +48,7 @@ router.register("visits", VisitViewSet)
 router.register("notifications", NotificationViewSet)
 router.register("sales-targets", SalesTargetViewSet)
 router.register("organizations", OrganizationViewSet)
+router.register("packages", SubscriptionPackageViewSet, basename="packages")
 router.register("verification-works", VerificationWorkViewSet, basename="verification-works")
 
 urlpatterns = [

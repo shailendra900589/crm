@@ -56,9 +56,10 @@ export const ADMIN_NAV: NavEntry[] = [
   { pageKey: "profile", href: "/profile", icon: UserRound, labels: { default: "Profile" } },
 ];
 
-/** Platform Super Admin — tenant dashboard only (never org Users) */
+/** Platform Super Admin — tenants + packages (never org Users) */
 export const SUPER_ADMIN_NAV: NavEntry[] = [
   { pageKey: "admin.organizations", href: "/admin/organizations", icon: LayoutDashboard, labels: { default: "Platform" } },
+  { pageKey: "admin.packages", href: "/admin/packages", icon: KeyRound, labels: { default: "Packages" } },
   { pageKey: "profile", href: "/profile", icon: UserRound, labels: { default: "Profile" } },
 ];
 
@@ -119,6 +120,7 @@ export function navLabel(entry: NavEntry, role: AppRole) {
 
 export function hrefToPageKey(pathname: string): string | null {
   if (pathname.startsWith("/admin/organizations")) return "admin.organizations";
+  if (pathname.startsWith("/admin/packages")) return "admin.packages";
   if (pathname.startsWith("/admin/projects")) return "admin.projects";
   if (pathname.startsWith("/admin/users")) return "admin.users";
   if (pathname.startsWith("/admin/forms")) return "admin.forms";
@@ -131,9 +133,12 @@ export function hrefToPageKey(pathname: string): string | null {
 
 export function homeHrefForUser(role: AppRole, allowedPages?: string[] | null) {
   if (role === "SuperAdmin") return "/admin/organizations";
-  if (role === "Admin") return "/admin";
-  if (role === "Ops") return "/verification";
   const pages = allowedPages || [];
+  if (role === "Admin") {
+    const hit = ADMIN_NAV.find((n) => n.pageKey !== "profile" && pages.includes(n.pageKey));
+    return hit?.href || "/profile";
+  }
+  if (role === "Ops" && pages.includes("verification")) return "/verification";
   if (pages.includes("dashboard")) return "/dashboard";
   const preferred = FIELD_NAV.find((n) => n.pageKey !== "profile" && pages.includes(n.pageKey));
   return preferred?.href || "/profile";
@@ -141,11 +146,9 @@ export function homeHrefForUser(role: AppRole, allowedPages?: string[] | null) {
 
 export function canAccessPage(role: AppRole, pageKey: string, allowedPages?: string[] | null) {
   if (role === "SuperAdmin") {
-    return pageKey === "admin.organizations" || pageKey === "profile";
+    return pageKey === "admin.organizations" || pageKey === "admin.packages" || pageKey === "profile";
   }
-  if (role === "Admin") {
-    return ADMIN_NAV.some((n) => n.pageKey === pageKey) || FIELD_NAV.some((n) => n.pageKey === pageKey);
-  }
+  // Company Admin + field roles: Super Admin package / module entitlements via allowed_pages
   if (!allowedPages) return false;
   return allowedPages.includes(pageKey);
 }

@@ -140,9 +140,16 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from .entitlements import ensure_org_entitlements
         from .page_access import allowed_pages_for_user
         from .permissions import user_has_crm_pro_mobile_access
         from .serializers import OrganizationSerializer
+
+        org = getattr(request.user, "organization", None)
+        if org is not None:
+            ensure_org_entitlements(org)
+            # Refresh FK cache after ensure may save package/modules
+            org.refresh_from_db()
 
         data = UserSerializer(request.user).data
         data["allowed_pages"] = allowed_pages_for_user(request.user)
@@ -151,7 +158,6 @@ class MeView(APIView):
         data["crm_pro_mobile_reason"] = None if allowed else (
             "CRM Pro mobile is not enabled for your account or project. Ask your Admin."
         )
-        org = getattr(request.user, "organization", None)
         data["organization_detail"] = OrganizationSerializer(org).data if org else None
         data["is_superadmin"] = request.user.role == User.Role.SUPERADMIN
         return Response(data)

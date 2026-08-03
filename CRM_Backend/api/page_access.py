@@ -86,13 +86,28 @@ def ensure_default_page_permissions():
     return created
 
 
+def _org_module_set(user):
+    """Modules Super Admin enabled for this company (empty → defaults)."""
+    from .entitlements import org_enabled_modules
+
+    org = getattr(user, "organization", None)
+    return set(org_enabled_modules(org))
+
+
 def allowed_pages_for_user(user):
     if not user or not getattr(user, "is_authenticated", False):
         return []
     if user.role == User.Role.SUPERADMIN:
-        return ["admin.organizations", "profile"]
+        return ["admin.organizations", "admin.packages", "profile"]
+
+    org_modules = _org_module_set(user)
+
     if user.role == User.Role.ADMIN:
-        return list(ADMIN_PAGE_KEYS)
+        # Company Admin only sees modules Super Admin granted to the company
+        pages = [k for k in ADMIN_PAGE_KEYS if k in org_modules]
+        if "profile" not in pages:
+            pages.append("profile")
+        return pages
 
     ensure_default_page_permissions()
     from .models import RolePagePermission
@@ -100,6 +115,8 @@ def allowed_pages_for_user(user):
     enabled = list(
         RolePagePermission.objects.filter(role=user.role, enabled=True).values_list("page_key", flat=True)
     )
+    # Intersect role permissions with company package / Super Admin modules
+    enabled = [k for k in enabled if k in org_modules]
     if "profile" not in enabled:
         enabled.append("profile")
     return enabled
@@ -108,8 +125,8 @@ def allowed_pages_for_user(user):
 def user_can_access_page(user, page_key: str) -> bool:
     if not page_key:
         return False
-    if user.role in (User.Role.ADMIN, User.Role.SUPERADMIN):
-        return True
+    if user.role == User.Role.SUPERADMIN:
+        return page_key in ("admin.organizations", "admin.packages", "profile")
     return page_key in allowed_pages_for_user(user)
 
 

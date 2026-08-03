@@ -2,12 +2,14 @@
 
 import { Badge, Button, Input } from "@/components/ui";
 import { api, type Organization, type PlatformSummary } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
   CheckCircle2,
   FolderKanban,
   Link2,
+  Minus,
   PauseCircle,
   PlayCircle,
   Plus,
@@ -15,6 +17,7 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type StatusFilter = "all" | Organization["status"];
@@ -69,9 +72,11 @@ export function OrganizationsAdminView() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [q, setQ] = useState("");
   const [showCreate, setShowCreate] = useState(false);
-  const [trialDays, setTrialDays] = useState("14");
+  const [trialDays, setTrialDays] = useState("15");
   const [plan, setPlan] = useState("Trial");
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [packageId, setPackageId] = useState("");
+  const [modules, setModules] = useState<string[]>([]);
   const [hrmsToken, setHrmsToken] = useState("");
   const [hrmsCompanyId, setHrmsCompanyId] = useState("");
   const [createForm, setCreateForm] = useState({
@@ -82,6 +87,17 @@ export function OrganizationsAdminView() {
     admin_name: "",
     plan_label: "Trial",
     status: "trial" as Organization["status"],
+  });
+
+  const { data: packages = [] } = useQuery({
+    queryKey: ["packages"],
+    queryFn: api.packages,
+    enabled: !!isSuper,
+  });
+  const { data: catalog } = useQuery({
+    queryKey: ["package-module-catalog"],
+    queryFn: api.packageModuleCatalog,
+    enabled: !!isSuper,
   });
 
   const invalidate = () => {
@@ -106,21 +122,32 @@ export function OrganizationsAdminView() {
     setPlan(o.plan_label || "Trial");
     setPaymentNotes(o.payment_notes || "");
     setHrmsCompanyId(o.hrms_company_id || "");
-    setTrialDays("14");
+    setPackageId(o.package ? String(o.package) : "");
+    setModules(o.enabled_modules || []);
+    const pkg = packages.find((p) => p.id === o.package);
+    setTrialDays(String(pkg?.trial_days || 15));
   };
+
+  const packagePayload = () => ({
+    package_id: packageId ? Number(packageId) : undefined,
+    modules: modules.length ? modules : undefined,
+  });
 
   const approve = useMutation({
     mutationFn: (mode: "trial" | "active") =>
       api.approveOrganization(selected!.id, {
         mode,
-        trial_days: Number(trialDays) || 14,
+        trial_days: Number(trialDays) || 15,
         plan_label: plan,
         payment_notes: paymentNotes,
         is_public: true,
+        ...packagePayload(),
       }),
     onSuccess: (org) => {
       invalidate();
       setSelected(org);
+      setModules(org.enabled_modules || []);
+      setPackageId(org.package ? String(org.package) : "");
     },
   });
 
@@ -144,14 +171,17 @@ export function OrganizationsAdminView() {
     mutationFn: (mode: "trial" | "active") =>
       api.reactivateOrganization(selected!.id, {
         mode,
-        trial_days: Number(trialDays) || 14,
+        trial_days: Number(trialDays) || 15,
         plan_label: plan,
         payment_notes: paymentNotes,
         is_public: true,
+        ...packagePayload(),
       }),
     onSuccess: (org) => {
       invalidate();
       setSelected(org);
+      setModules(org.enabled_modules || []);
+      setPackageId(org.package ? String(org.package) : "");
     },
   });
 
@@ -163,10 +193,51 @@ export function OrganizationsAdminView() {
         payment_notes: paymentNotes,
         hrms_connected: !!hrmsCompanyId,
         hrms_company_id: hrmsCompanyId,
+        ...packagePayload(),
       }),
     onSuccess: (org) => {
       invalidate();
       setSelected(org);
+      setModules(org.enabled_modules || []);
+    },
+  });
+
+  const adjustTrial = useMutation({
+    mutationFn: (delta_days: number) =>
+      api.adjustOrganizationTrial(selected!.id, { delta_days, payment_notes: paymentNotes }),
+    onSuccess: (org) => {
+      invalidate();
+      setSelected(org);
+    },
+  });
+
+  const saveModules = useMutation({
+    mutationFn: () =>
+      api.setOrganizationModules(selected!.id, {
+        modules,
+        package_id: packageId ? Number(packageId) : undefined,
+      }),
+    onSuccess: (org) => {
+      invalidate();
+      setSelected(org);
+      setModules(org.enabled_modules || []);
+    },
+  });
+
+  const recordPayment = useMutation({
+    mutationFn: () =>
+      api.recordOrganizationPayment(selected!.id, {
+        plan_label: plan || "Paid",
+        payment_notes: paymentNotes,
+        package_id: packageId ? Number(packageId) : undefined,
+        modules: modules.length ? modules : undefined,
+        is_public: true,
+      }),
+    onSuccess: (org) => {
+      invalidate();
+      setSelected(org);
+      setModules(org.enabled_modules || []);
+      setPackageId(org.package ? String(org.package) : "");
     },
   });
 
@@ -215,16 +286,24 @@ export function OrganizationsAdminView() {
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">Super Admin</p>
             <h1 className="mt-1 text-xl font-bold sm:text-2xl">Platform dashboard</h1>
             <p className="mt-1 max-w-xl text-xs text-slate-300 sm:text-sm">
-              Manage every tenant — approve, trial, payment, suspend, HRMS sync.
+              Manage every tenant — packages, modules, 15-day trial, payment unlock, HRMS sync.
             </p>
           </div>
           {isSuper && (
-            <Button
-              className="h-9 gap-1.5 bg-white text-slate-900 hover:bg-slate-100"
-              onClick={() => setShowCreate(true)}
-            >
-              <Plus className="h-4 w-4" /> Add company
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/admin/packages"
+                className="inline-flex h-9 items-center rounded-lg border border-white/20 bg-white/10 px-3 text-sm font-semibold text-white hover:bg-white/15"
+              >
+                Packages
+              </Link>
+              <Button
+                className="h-9 gap-1.5 bg-white text-slate-900 hover:bg-slate-100"
+                onClick={() => setShowCreate(true)}
+              >
+                <Plus className="h-4 w-4" /> Add company
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -421,7 +500,7 @@ export function OrganizationsAdminView() {
               <div className="mt-4 space-y-3">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <p className="mb-1 text-[11px] font-semibold text-slate-500">Trial days</p>
+                    <p className="mb-1 text-[11px] font-semibold text-slate-500">Trial days (on approve)</p>
                     <Input value={trialDays} onChange={(e) => setTrialDays(e.target.value)} />
                   </div>
                   <div>
@@ -429,11 +508,128 @@ export function OrganizationsAdminView() {
                     <Input value={plan} onChange={(e) => setPlan(e.target.value)} />
                   </div>
                 </div>
+
+                <div>
+                  <p className="mb-1 text-[11px] font-semibold text-slate-500">Package</p>
+                  <select
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-900"
+                    value={packageId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setPackageId(id);
+                      const pkg = packages.find((p) => String(p.id) === id);
+                      if (pkg) {
+                        setPlan(pkg.name);
+                        setTrialDays(String(pkg.trial_days || 15));
+                        setModules(pkg.module_keys || []);
+                      }
+                    }}
+                  >
+                    <option value="">Default / current</option>
+                    {packages.filter((p) => p.is_active).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} — ₹{Number(p.price).toLocaleString("en-IN")} ({p.trial_days}d)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <Input
                   placeholder="Payment / commercial notes"
                   value={paymentNotes}
                   onChange={(e) => setPaymentNotes(e.target.value)}
                 />
+
+                {(selected.status === "trial" || selected.trial_ends_at) && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-950/50">
+                    <p className="text-[11px] font-semibold text-slate-500">Trial ends</p>
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                      {selected.trial_ends_at
+                        ? new Date(selected.trial_ends_at).toLocaleString()
+                        : "Not set — use + days to start a trial window"}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <Button
+                        variant="outline"
+                        className="h-8 gap-1 text-xs"
+                        disabled={adjustTrial.isPending}
+                        onClick={() => adjustTrial.mutate(1)}
+                      >
+                        <Plus className="h-3 w-3" /> +1 day
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-8 gap-1 text-xs"
+                        disabled={adjustTrial.isPending}
+                        onClick={() => adjustTrial.mutate(7)}
+                      >
+                        <Plus className="h-3 w-3" /> +7 days
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-8 gap-1 text-xs"
+                        disabled={adjustTrial.isPending}
+                        onClick={() => adjustTrial.mutate(-1)}
+                      >
+                        <Minus className="h-3 w-3" /> −1 day
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-8 gap-1 text-xs"
+                        disabled={adjustTrial.isPending}
+                        onClick={() => adjustTrial.mutate(-7)}
+                      >
+                        <Minus className="h-3 w-3" /> −7 days
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Modules for this company</p>
+                    <Button
+                      variant="outline"
+                      className="h-7 text-[11px]"
+                      disabled={saveModules.isPending}
+                      onClick={() => saveModules.mutate()}
+                    >
+                      Save modules
+                    </Button>
+                  </div>
+                  <div className="grid max-h-40 gap-1 overflow-y-auto sm:grid-cols-2">
+                    {(catalog?.modules || []).map((m) => {
+                      const on = modules.includes(m.key);
+                      return (
+                        <label
+                          key={m.key}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px]",
+                            on
+                              ? "border-blue-300 bg-blue-50 dark:border-blue-500/40 dark:bg-blue-500/10"
+                              : "border-slate-200 dark:border-slate-700",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={on || !!m.locked}
+                            disabled={!!m.locked}
+                            onChange={() => {
+                              if (m.locked) return;
+                              setModules((prev) =>
+                                prev.includes(m.key) ? prev.filter((k) => k !== m.key) : [...prev, m.key],
+                              );
+                            }}
+                          />
+                          {m.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1.5 text-[10px] text-slate-400">
+                    Company Admin / users only see pages enabled here (package + Super Admin).
+                  </p>
+                </div>
 
                 {(selected.status === "pending" || selected.status === "rejected") && (
                   <div className="flex flex-wrap gap-2">
@@ -463,20 +659,10 @@ export function OrganizationsAdminView() {
                     {selected.status === "trial" && (
                       <Button
                         className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-                        onClick={() =>
-                          api
-                            .setOrganizationPayment(selected.id, {
-                              status: "active",
-                              plan_label: plan || "Paid",
-                              payment_notes: paymentNotes,
-                            })
-                            .then((org) => {
-                              invalidate();
-                              setSelected(org);
-                            })
-                        }
+                        disabled={recordPayment.isPending}
+                        onClick={() => recordPayment.mutate()}
                       >
-                        Convert to Paid
+                        Payment success → Unlock
                       </Button>
                     )}
                     <Button variant="danger" className="gap-1.5" onClick={() => suspend.mutate()} disabled={suspend.isPending}>
@@ -498,6 +684,14 @@ export function OrganizationsAdminView() {
                       <PlayCircle className="h-4 w-4" /> Reactivate + Paid
                     </Button>
                   </div>
+                )}
+
+                {(adjustTrial.isError || saveModules.isError || recordPayment.isError) && (
+                  <p className="text-xs text-rose-600">
+                    {(
+                      (adjustTrial.error || saveModules.error || recordPayment.error) as Error
+                    )?.message || "Action failed"}
+                  </p>
                 )}
               </div>
             )}

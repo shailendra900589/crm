@@ -252,6 +252,19 @@ export const api = {
     request<Organization>(`/api/organizations/${id}/reactivate/`, { method: "POST", body: JSON.stringify(data || {}) }),
   setOrganizationPayment: (id: number, data: Record<string, unknown>) =>
     request<Organization>(`/api/organizations/${id}/set_payment/`, { method: "POST", body: JSON.stringify(data) }),
+  adjustOrganizationTrial: (id: number, data: { delta_days?: number; trial_days?: number; payment_notes?: string }) =>
+    request<Organization>(`/api/organizations/${id}/adjust_trial/`, { method: "POST", body: JSON.stringify(data) }),
+  setOrganizationModules: (id: number, data: { modules: string[]; package_id?: number }) =>
+    request<Organization>(`/api/organizations/${id}/set_modules/`, { method: "POST", body: JSON.stringify(data) }),
+  recordOrganizationPayment: (id: number, data: Record<string, unknown>) =>
+    request<Organization>(`/api/organizations/${id}/record_payment/`, { method: "POST", body: JSON.stringify(data) }),
+  packages: () => requestList<SubscriptionPackage>(`/api/packages/`),
+  packageModuleCatalog: () => request<{ modules: ModuleCatalogItem[] }>(`/api/packages/module_catalog/`),
+  createPackage: (data: Partial<SubscriptionPackage>) =>
+    request<SubscriptionPackage>(`/api/packages/`, { method: "POST", body: JSON.stringify(data) }),
+  updatePackage: (id: number, data: Partial<SubscriptionPackage>) =>
+    request<SubscriptionPackage>(`/api/packages/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  deletePackage: (id: number) => request<void>(`/api/packages/${id}/`, { method: "DELETE" }),
   syncHrmsEmployees: (id: number, data: { hrms_token: string; force?: boolean }) =>
     request<{ created: number; updated: number; fetched: number; errors: string[] }>(
       `/api/organizations/${id}/sync-hrms-employees/`,
@@ -925,6 +938,30 @@ export type DashboardStats = {
   team_form_activity: FormSubmission[];
 };
 
+export type ModuleCatalogItem = {
+  key: string;
+  label: string;
+  group: string;
+  default?: boolean;
+  locked?: boolean;
+};
+
+export type SubscriptionPackage = {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string;
+  price: string | number;
+  currency: string;
+  trial_days: number;
+  module_keys: string[];
+  is_active: boolean;
+  is_default: boolean;
+  sort_order: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
 export type Organization = {
   id: number;
   name: string;
@@ -937,6 +974,15 @@ export type Organization = {
   plan_label?: string;
   trial_ends_at?: string | null;
   payment_notes?: string;
+  package?: number | null;
+  package_name?: string | null;
+  package_price?: string | number | null;
+  enabled_modules?: string[];
+  payment_status?: "none" | "pending" | "paid";
+  payment_status_display?: string;
+  amount_paid?: string | number | null;
+  paid_at?: string | null;
+  package_assigned_at?: string | null;
   hrms_connected?: boolean;
   hrms_company_id?: string;
   hrms_api_base_url?: string;
