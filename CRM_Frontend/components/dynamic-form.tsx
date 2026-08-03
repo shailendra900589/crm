@@ -46,6 +46,7 @@ export function DynamicForm({
   readOnly,
   layout = "grid",
   leadId,
+  ensureLeadId,
   onSubmit,
   submitLabel = "Submit",
   submitting = false,
@@ -56,6 +57,8 @@ export function DynamicForm({
   readOnly?: boolean;
   layout?: "grid" | "stack";
   leadId?: number;
+  /** Create/resolve a lead before file upload (Fresh Direct). */
+  ensureLeadId?: () => Promise<number>;
   /** When set, wizard last step shows this action (multi-panel forms). */
   onSubmit?: () => void;
   submitLabel?: string;
@@ -78,6 +81,7 @@ export function DynamicForm({
         readOnly={readOnly}
         layout={layout}
         leadId={leadId}
+        ensureLeadId={ensureLeadId}
         onSubmit={onSubmit}
         submitLabel={submitLabel}
         submitting={submitting}
@@ -95,6 +99,7 @@ export function DynamicForm({
       readOnly={readOnly}
       layout={layout}
       leadId={leadId}
+      ensureLeadId={ensureLeadId}
     />
   );
 }
@@ -106,6 +111,7 @@ function WizardForm({
   readOnly,
   layout,
   leadId,
+  ensureLeadId,
   onSubmit,
   submitLabel,
   submitting,
@@ -116,6 +122,7 @@ function WizardForm({
   readOnly?: boolean;
   layout: "grid" | "stack";
   leadId?: number;
+  ensureLeadId?: () => Promise<number>;
   onSubmit?: () => void;
   submitLabel: string;
   submitting?: boolean;
@@ -204,6 +211,7 @@ function WizardForm({
           readOnly={readOnly}
           layout={layout}
           leadId={leadId}
+          ensureLeadId={ensureLeadId}
         />
 
         {errors.length > 0 && (
@@ -273,6 +281,7 @@ function FormFieldsBlock({
   readOnly,
   layout,
   leadId,
+  ensureLeadId,
 }: {
   fields: FormField[];
   values: Record<string, unknown>;
@@ -280,6 +289,7 @@ function FormFieldsBlock({
   readOnly?: boolean;
   layout: "grid" | "stack";
   leadId?: number;
+  ensureLeadId?: () => Promise<number>;
 }) {
   if (!fields.length) {
     return <p className="text-sm text-slate-400">No fields in this step.</p>;
@@ -369,7 +379,14 @@ function FormFieldsBlock({
               onChange={(e) => set(f.field_id, e.target.value)}
             />
           ) : f.type === "file" ? (
-            <FileUploadField field={f} value={values[f.field_id]} readOnly={readOnly} leadId={leadId} onChange={(val) => set(f.field_id, val)} />
+            <FileUploadField
+              field={f}
+              value={values[f.field_id]}
+              readOnly={readOnly}
+              leadId={leadId}
+              ensureLeadId={ensureLeadId}
+              onChange={(val) => set(f.field_id, val)}
+            />
           ) : f.type === "currency" ? (
             <div className="relative">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">₹</span>
@@ -408,12 +425,14 @@ function FileUploadField({
   value,
   readOnly,
   leadId,
+  ensureLeadId,
   onChange,
 }: {
   field: FormField;
   value: unknown;
   readOnly?: boolean;
   leadId?: number;
+  ensureLeadId?: () => Promise<number>;
   onChange: (val: string) => void;
 }) {
   const config = getFileAcceptConfig(field);
@@ -433,14 +452,18 @@ function FileUploadField({
       setError(typeErr);
       return;
     }
-    if (!leadId) {
-      setError("Select a lead before uploading files");
-      return;
-    }
     setError("");
     setUploading(true);
     try {
-      const result = await api.uploadFormFile(leadId, field.field_id, file);
+      let id = leadId;
+      if (!id && ensureLeadId) {
+        id = await ensureLeadId();
+      }
+      if (!id) {
+        setError("Enter merchant name & mobile above, then upload");
+        return;
+      }
+      const result = await api.uploadFormFile(id, field.field_id, file);
       onChange(result.url);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");

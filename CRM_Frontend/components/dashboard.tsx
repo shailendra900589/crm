@@ -1,10 +1,19 @@
 "use client";
 
 import { DashboardFilters, FilterSummaryBanner } from "@/components/dashboard-filters";
-import { DynamicForm, FormLabel, formTextareaCls } from "@/components/dynamic-form";
+import { DynamicForm, FormLabel, formInputCls, formTextareaCls } from "@/components/dynamic-form";
 import { hasWizardSteps } from "@/lib/form-steps";
 import { SearchableSelect } from "@/components/searchable-select";
-import { api, getProjectId, onProjectChange, setProjectId, type DashboardFilters as DashboardFilterState, type LeadVisit, type RevisitLead } from "@/lib/api";
+import {
+  api,
+  getProjectId,
+  onProjectChange,
+  setProjectId,
+  type DashboardFilters as DashboardFilterState,
+  type FormField,
+  type LeadVisit,
+  type RevisitLead,
+} from "@/lib/api";
 import { useLivePulse } from "@/components/live-sync";
 import { cn } from "@/lib/utils";
 import { Button, Input, MetricCard, Skeleton } from "@/components/ui";
@@ -28,7 +37,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
@@ -39,6 +48,44 @@ const STATUS_LABELS: Record<string, string> = {
   order_confirmed: "Order Confirmed", interested: "Interested", follow_up: "Follow Up",
   not_interested: "Not Interested", callback: "Callback",
 };
+
+type OnboardMode = "existing" | "fresh";
+
+const emptyFreshIdentity = () => ({
+  merchant_name: "",
+  merchant_mobile: "",
+  city: "",
+  product: "",
+});
+
+function answerByLabel(schema: FormField[], answers: Record<string, unknown>, matchers: string[]): string {
+  for (const f of schema || []) {
+    const label = (f.label || "").toLowerCase();
+    if (matchers.some((m) => label.includes(m))) {
+      const v = answers[f.field_id];
+      if (typeof v === "string" && v.trim()) return v.trim();
+    }
+  }
+  return "";
+}
+
+function resolveMerchantIdentity(
+  schema: FormField[],
+  answers: Record<string, unknown>,
+  identity: ReturnType<typeof emptyFreshIdentity>,
+) {
+  const merchant_name =
+    identity.merchant_name.trim() ||
+    answerByLabel(schema, answers, ["merchant name"]) ||
+    answerByLabel(schema, answers, ["store name", "merchant store"]);
+  const merchant_mobile =
+    identity.merchant_mobile.trim() ||
+    answerByLabel(schema, answers, ["mobile", "phone"]);
+  const city =
+    identity.city.trim() ||
+    answerByLabel(schema, answers, ["district", "city"]);
+  return { merchant_name, merchant_mobile, city };
+}
 
 export function DashboardView() {
   const { pulse } = useLivePulse();
@@ -76,6 +123,12 @@ export function DashboardView() {
   const [visitDate, setVisitDate] = useState("");
   const [visitRemarks, setVisitRemarks] = useState("");
   const [assignTo, setAssignTo] = useState("");
+  const [onboardMode, setOnboardMode] = useState<OnboardMode>("fresh");
+  const [freshIdentity, setFreshIdentity] = useState(emptyFreshIdentity);
+  const [freshLeadId, setFreshLeadId] = useState<number | null>(null);
+  const [freshMobileCheck, setFreshMobileCheck] = useState("");
+  const [freshSubmitBanner, setFreshSubmitBanner] = useState<string | null>(null);
+  const ensuringLeadRef = useRef<Promise<number> | null>(null);
 
   const { data: modalLead } = useQuery({
     queryKey: ["lead", activeVisit?.lead],
@@ -134,11 +187,43 @@ export function DashboardView() {
 
   useEffect(() => {
     setSelectedLead(null);
+    setFreshLeadId(null);
+    setFreshIdentity(emptyFreshIdentity());
+    setFreshMobileCheck("");
+    setFreshSubmitBanner(null);
   }, [filters.project]);
 
+  // No leads for this project → default to Fresh Direct so BDM is never stuck
   useEffect(() => {
+    if (!filters.project || myLeads === undefined) return;
+    if (leads.length === 0) {
+      setOnboardMode("fresh");
+      setSelectedLead(null);
+    }
+  }, [filters.project, myLeads, leads.length]);
+
+  useEffect(() => {
+    if (onboardMode !== "existing") return;
     if (leads.length && !selectedLead) setSelectedLead(leads[0].id);
-  }, [leads, selectedLead]);
+  }, [leads, selectedLead, onboardMode]);
+
+  useEffect(() => {
+    if (onboardMode !== "fresh") return;
+    const t = setTimeout(() => setFreshMobileCheck(freshIdentity.merchant_mobile.trim()), 400);
+    return () => clearTimeout(t);
+  }, [freshIdentity.merchant_mobile, onboardMode]);
+
+  const projectNum = filters.project ? Number(filters.project) : 0;
+
+  const { data: freshDuplicateCheck } = useQuery({
+    queryKey: ["check-duplicate", "fresh", projectNum, freshMobileCheck],
+    queryFn: () => api.checkDuplicate({ mobile: freshMobileCheck, project: projectNum || undefined }),
+    enabled:
+      onboardMode === "fresh" &&
+      !freshLeadId &&
+      !!projectNum &&
+      freshMobileCheck.replace(/\D/g, "").length >= 10,
+  });
 
   const fillSchema = useMemo(
     () => schemaForFill(data?.project_form?.schema, data?.project_form?.enable_collection),
@@ -153,12 +238,76 @@ export function DashboardView() {
     if (activeVisit) setVisitModalRemarks("");
   }, [activeVisit]);
 
+  const ensureFreshLead = async (): Promise<number> => {
+    if (selectedLead) return selectedLead;
+    if (freshLeadId) return freshLeadId;
+    if (ensuringLeadRef.current) return ensuringLeadRef.current;
+
+    const run = (async () => {
+      if (!projectNum) throw new Error("Select a project before Fresh Direct Onboarding");
+      const resolved = resolveMerchantIdentity(fillSchema, formData, freshIdentity);
+      if (!resolved.merchant_name) {
+        throw new Error("Enter merchant name above (or in the form) before continuing");
+      }
+      if (resolved.merchant_mobile.replace(/\D/g, "").length < 10) {
+        throw new Error("Enter a valid 10-digit mobile number above (or in the form)");
+      }
+      setFreshIdentity((f) => ({
+        ...f,
+        merchant_name: resolved.merchant_name,
+        merchant_mobile: resolved.merchant_mobile,
+        city: resolved.city || f.city,
+      }));
+
+      const check = await api.checkDuplicate({
+        mobile: resolved.merchant_mobile,
+        project: projectNum,
+      });
+      let force = false;
+      if (check.duplicate) {
+        const ok = confirm(
+          `This mobile already has ${check.count} lead(s) in this project. Create another anyway?`,
+        );
+        if (!ok) throw new Error("Duplicate mobile — cancelled");
+        force = true;
+      }
+
+      const lead = await api.createLead({
+        project: projectNum,
+        merchant_name: resolved.merchant_name,
+        merchant_mobile: resolved.merchant_mobile,
+        city: resolved.city || undefined,
+        product: freshIdentity.product ? Number(freshIdentity.product) : null,
+        notes: "Fresh direct onboarding",
+        force,
+      });
+      setFreshLeadId(lead.id);
+      setSelectedLead(lead.id);
+      qc.invalidateQueries({ queryKey: ["leads"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      return lead.id;
+    })();
+
+    ensuringLeadRef.current = run;
+    try {
+      return await run;
+    } finally {
+      ensuringLeadRef.current = null;
+    }
+  };
+
   const submitForm = useMutation({
-    mutationFn: () =>
-      api.submitForm(selectedLead!, formData, {
-        visit_id: data?.upcoming_visits?.find((v) => v.lead === selectedLead)?.id,
+    mutationFn: async () => {
+      let leadId = selectedLead;
+      if (onboardMode === "fresh") {
+        leadId = await ensureFreshLead();
+      }
+      if (!leadId) throw new Error("Select a lead, or switch to Fresh Direct and enter merchant details");
+      return api.submitForm(leadId, formData, {
+        visit_id: data?.upcoming_visits?.find((v) => v.lead === leadId)?.id,
         remarks,
-      }),
+      });
+    },
     onSuccess: (sub) => {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["leads"] });
@@ -168,10 +317,46 @@ export function DashboardView() {
       qc.invalidateQueries({ queryKey: ["verification-summary"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
       qc.invalidateQueries({ queryKey: ["form-submissions-recent"] });
-      if (sub?.answers) setFormData(valuesForSchema(fillSchema, sub.answers));
       setRemarks("");
+      if (onboardMode === "fresh") {
+        const count = sub?.answer_count != null ? ` (${sub.answer_count} fields)` : "";
+        setFreshSubmitBanner(`Form submitted — saved to database${count}. Ready for the next merchant.`);
+        setFreshIdentity(emptyFreshIdentity());
+        setFreshMobileCheck("");
+        setFreshLeadId(null);
+        setSelectedLead(null);
+        setFormData({});
+      } else if (sub?.answers) {
+        setFormData(valuesForSchema(fillSchema, sub.answers));
+      }
     },
   });
+
+  const resetFreshStrip = () => {
+    setFreshIdentity(emptyFreshIdentity());
+    setFreshMobileCheck("");
+    setFreshLeadId(null);
+    setSelectedLead(null);
+    setFormData({});
+    setRemarks("");
+    setFreshSubmitBanner(null);
+    submitForm.reset();
+  };
+
+  const switchOnboardMode = (mode: OnboardMode) => {
+    setOnboardMode(mode);
+    submitForm.reset();
+    setFreshSubmitBanner(null);
+    if (mode === "fresh") {
+      setSelectedLead(freshLeadId);
+      if (!freshLeadId) {
+        setFormData({});
+        setRemarks("");
+      }
+    } else {
+      setSelectedLead(leads[0]?.id ?? null);
+    }
+  };
 
   const submitVisitModal = useMutation({
     mutationFn: () =>
@@ -195,10 +380,12 @@ export function DashboardView() {
   });
 
   useEffect(() => {
+    // Fresh Direct: never wipe in-progress answers when a lead is auto-created mid-fill
+    if (onboardMode === "fresh") return;
     const lead = leads.find((l) => l.id === selectedLead);
     setFormData(valuesForSchema(fillSchema, lead?.custom_data as Record<string, unknown>));
     submitForm.reset();
-  }, [selectedLead, leads, fillSchema]);
+  }, [selectedLead, leads, fillSchema, onboardMode]);
 
   const assignVisit = useMutation({
     mutationFn: () =>
@@ -399,8 +586,8 @@ export function DashboardView() {
               isManager
                 ? "Managers usually coach the team — fill a form only when needed"
                 : isTL
-                  ? "Complete forms for your squad visits"
-                  : "Fill merchant details and complete the visit"
+                  ? "Complete forms for your squad visits — existing lead or Fresh Direct"
+                  : "Pick an existing lead, or use Fresh Direct when no lead is assigned yet"
             }
           />
 
@@ -423,41 +610,163 @@ export function DashboardView() {
                 </span>
               </div>
 
-              {/* Lead picker */}
+              {/* Onboarding mode: Fresh Direct (default) or existing lead */}
               <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-700 sm:px-5">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <div className="min-w-0 flex-1">
-                    <FormLabel>Select Lead / Merchant</FormLabel>
-                    <SearchableSelect
-                      value={selectedLead ? String(selectedLead) : ""}
-                      onChange={(val) => setSelectedLead(val ? Number(val) : null)}
-                      options={leadOptions}
-                      placeholder="Search merchant name or city..."
-                      searchPlaceholder="Type merchant name, city or lead #..."
-                      emptyText="No matching leads found"
-                    />
-                  </div>
-                  {selectedLeadInfo && (
-                    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] dark:border-slate-600 dark:bg-slate-950/60 sm:mb-0.5">
-                      <span className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-200">
-                        <MapPin className="h-3 w-3 text-slate-400" />
-                        {selectedLeadInfo.merchant_city || "—"}
-                      </span>
-                      <span className="text-slate-400">·</span>
-                      <span className="tabular-nums text-slate-500 dark:text-slate-400">#{selectedLeadInfo.id}</span>
-                      {selectedLeadInfo.status_display && (
-                        <>
-                          <span className="text-slate-400">·</span>
-                          <span className="text-slate-500 dark:text-slate-400">{selectedLeadInfo.status_display}</span>
-                        </>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <FormLabel>How are you onboarding?</FormLabel>
+                  <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-600 dark:bg-slate-950/60">
+                    <button
+                      type="button"
+                      onClick={() => switchOnboardMode("fresh")}
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-[12px] font-semibold transition",
+                        onboardMode === "fresh"
+                          ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-50"
+                          : "text-slate-500 hover:text-slate-700 dark:text-slate-400",
                       )}
-                    </div>
-                  )}
+                    >
+                      Fresh Direct
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => switchOnboardMode("existing")}
+                      className={cn(
+                        "rounded-md px-3 py-1.5 text-[12px] font-semibold transition",
+                        onboardMode === "existing"
+                          ? "bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-50"
+                          : "text-slate-500 hover:text-slate-700 dark:text-slate-400",
+                      )}
+                    >
+                      Existing lead
+                    </button>
+                  </div>
                 </div>
+
+                {onboardMode === "existing" ? (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <div className="min-w-0 flex-1">
+                      <FormLabel>Select Lead / Merchant</FormLabel>
+                      <SearchableSelect
+                        value={selectedLead ? String(selectedLead) : ""}
+                        onChange={(val) => setSelectedLead(val ? Number(val) : null)}
+                        options={leadOptions}
+                        placeholder={leads.length ? "Search merchant name or city..." : "No leads yet — use Fresh Direct"}
+                        searchPlaceholder="Type merchant name, city or lead #..."
+                        emptyText="No matching leads found"
+                      />
+                    </div>
+                    {selectedLeadInfo && (
+                      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] dark:border-slate-600 dark:bg-slate-950/60 sm:mb-0.5">
+                        <span className="inline-flex items-center gap-1 font-medium text-slate-700 dark:text-slate-200">
+                          <MapPin className="h-3 w-3 text-slate-400" />
+                          {selectedLeadInfo.merchant_city || "—"}
+                        </span>
+                        <span className="text-slate-400">·</span>
+                        <span className="tabular-nums text-slate-500 dark:text-slate-400">#{selectedLeadInfo.id}</span>
+                        {selectedLeadInfo.status_display && (
+                          <>
+                            <span className="text-slate-400">·</span>
+                            <span className="text-slate-500 dark:text-slate-400">{selectedLeadInfo.status_display}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {freshSubmitBanner && (
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                        {freshSubmitBanner}
+                        {" "}
+                        <Link href="/verification" className="font-semibold underline">
+                          Open verification desk
+                        </Link>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[12px] text-slate-500 dark:text-slate-400">
+                        No lead select needed — fill merchant contact + form, then Submit. Lead is created automatically.
+                      </p>
+                      {freshLeadId ? (
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">
+                            Fresh · #{freshLeadId}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={resetFreshStrip}
+                            className="text-[12px] font-semibold text-blue-600 hover:underline dark:text-blue-300"
+                          >
+                            New merchant
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    {!projectNum ? (
+                      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                        Select a project first to use Fresh Direct Onboarding.
+                      </p>
+                    ) : (
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="sm:col-span-2 lg:col-span-1">
+                          <FormLabel required>Merchant name</FormLabel>
+                          <Input
+                            className={formInputCls}
+                            placeholder="Store / merchant name"
+                            value={freshIdentity.merchant_name}
+                            onChange={(e) => {
+                              setFreshSubmitBanner(null);
+                              setFreshIdentity((f) => ({ ...f, merchant_name: e.target.value }));
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <FormLabel required>Mobile</FormLabel>
+                          <Input
+                            className={formInputCls}
+                            placeholder="+91 98765 43210"
+                            value={freshIdentity.merchant_mobile}
+                            onChange={(e) => {
+                              setFreshSubmitBanner(null);
+                              setFreshIdentity((f) => ({ ...f, merchant_mobile: e.target.value }));
+                            }}
+                          />
+                          {freshDuplicateCheck?.duplicate && (
+                            <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-300">
+                              Mobile already has {freshDuplicateCheck.count} lead(s) — submit will confirm.
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <FormLabel>City</FormLabel>
+                          <Input
+                            className={formInputCls}
+                            placeholder="City / district"
+                            value={freshIdentity.city}
+                            onChange={(e) => setFreshIdentity((f) => ({ ...f, city: e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <FormLabel>Product</FormLabel>
+                          <select
+                            className={formInputCls}
+                            value={freshIdentity.product}
+                            onChange={(e) => setFreshIdentity((f) => ({ ...f, product: e.target.value }))}
+                          >
+                            <option value="">Optional</option>
+                            {(products || []).map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Fields + submit */}
-              {selectedLead ? (
+              {/* Fields + submit — Fresh mode opens form without selecting a lead */}
+              {onboardMode === "fresh" || selectedLead ? (
                 <div className="px-4 py-4 sm:px-5 sm:py-5">
                   <SectionDivider label="Form Details" />
                   <DynamicForm
@@ -465,6 +774,7 @@ export function DashboardView() {
                     values={formData}
                     onChange={setFormData}
                     leadId={selectedLead ?? undefined}
+                    ensureLeadId={onboardMode === "fresh" ? () => ensureFreshLead() : undefined}
                     onSubmit={() => submitForm.mutate()}
                     submitLabel={submitForm.isPending ? "Submitting…" : "Submit & Complete"}
                     submitting={submitForm.isPending}
@@ -475,7 +785,7 @@ export function DashboardView() {
                       {(submitForm.error as Error)?.message || (submitVisitModal.error as Error)?.message || "Submit failed"}
                     </div>
                   )}
-                  {submitForm.isSuccess && (
+                  {submitForm.isSuccess && onboardMode === "existing" && (
                     <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
                       Form submitted — saved to database
                       {submitForm.data?.answer_count != null ? ` (${submitForm.data.answer_count} fields)` : ""}.
@@ -503,7 +813,7 @@ export function DashboardView() {
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       <Button
                         onClick={() => submitForm.mutate()}
-                        disabled={submitForm.isPending}
+                        disabled={submitForm.isPending || (onboardMode === "fresh" && !projectNum)}
                         className="h-10 gap-2 rounded-lg bg-blue-600 px-5 text-sm font-semibold hover:bg-blue-700"
                       >
                         <Send className="h-3.5 w-3.5" />
@@ -514,7 +824,9 @@ export function DashboardView() {
                   </div>
                 </div>
               ) : (
-                <p className="px-5 py-10 text-center text-sm text-slate-400">Select a lead to open the form.</p>
+                <p className="px-5 py-10 text-center text-sm text-slate-400">
+                  Select a lead, or switch to Fresh Direct Onboarding.
+                </p>
               )}
             </div>
           ) : (
