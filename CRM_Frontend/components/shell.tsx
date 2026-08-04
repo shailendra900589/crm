@@ -1,5 +1,6 @@
 "use client";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { GlobalSearch } from "@/components/global-search";
 import { LiveSyncProvider, liveScopeForRole } from "@/components/live-sync";
 import { NotificationsBell } from "@/components/notifications-bell";
@@ -247,8 +248,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
           )}
         >
           <div className={cn("border-b border-white/10 bg-gradient-to-br px-5 py-5 text-white", themeCfg.sidebarFrom)}>
+            <div className="mb-3 flex items-center gap-2.5">
+              <BrandLogo size={36} />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/70">Trackbook CRM</p>
+                <p className="text-sm font-bold tracking-tight">{themeCfg.brand}</p>
+              </div>
+            </div>
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/70">{themeCfg.eyebrow}</p>
-            <p className="mt-1 text-lg font-bold tracking-tight">{themeCfg.brand}</p>
             {role === "SuperAdmin" ? (
               <p className="mt-2 text-xs text-white/70">Platform control · all companies</p>
             ) : role === "Admin" ? (

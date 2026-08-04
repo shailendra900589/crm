@@ -1,0 +1,28 @@
+name: crm_mobile
+description: Trackbook CRM field app for Manager, TL, BDM, Ops.
+publish_to: 'none'
+version: 1.0.1+2
+
+environment:
+  sdk: ^3.12.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.6.1
+  go_router: ^17.3.0
+  dio: ^5.11.0
+  flutter_secure_storage: ^10.3.1
+  intl: ^0.20.3
+  shared_preferences: ^2.5.5
+  image_picker: ^1.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/brand/trackbook_crm.png

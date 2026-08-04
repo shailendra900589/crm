@@ -677,17 +677,25 @@ def aggregate_money_metrics(leads_qs, project_ids=None):
 
 
 def user_has_crm_pro_mobile_access(user) -> bool:
-    """Trackbook mobile CRM Pro — user must be active and enabled on user or project."""
+    """Trackbook mobile CRM — Admin + field roles (Manager/TL/BDM/Ops) by default.
+
+    Admin can hard-disable a user with ``crm_pro_mobile_enabled=False``.
+    Otherwise Manager / TL / BDM / Ops can use the app (same CRM APIs as web).
+    Legacy project flag still grants access when set.
+    """
     if not user or not getattr(user, "is_authenticated", False):
         return False
     if not getattr(user, "is_active_user", True) or not user.is_active:
         return False
-    if is_admin(user):
+    if is_admin(user) or is_superadmin(user):
         return True
     explicit = getattr(user, "crm_pro_mobile_enabled", None)
     if explicit is False:
         return False
     if explicit is True:
+        return True
+    # Field staff work on mobile by default (not BDM-only)
+    if user.role in (User.Role.MANAGER, User.Role.TL, User.Role.BDM, User.Role.OPS):
         return True
     from .models import Project
 

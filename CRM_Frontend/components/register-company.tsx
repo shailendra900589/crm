@@ -72,6 +72,11 @@ export function RegisterCompanyView() {
     <MarketingShell>
       <div className="mx-auto max-w-2xl space-y-5 px-4 py-12 sm:px-6">
         <div className="rounded-2xl bg-gradient-to-br from-[#0B3D4A] to-[#163E4A] p-6 text-white">
+          <div className="mb-3 flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/trackbook-crm.png" alt="Trackbook CRM" width={48} height={48} className="rounded-xl" />
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/70">Trackbook CRM</p>
+          </div>
           <h1 className="font-[family-name:var(--font-syne)] text-2xl font-extrabold">Register your company</h1>
           <p className="mt-1 text-sm text-white/80">
             Upload corporate KYC documents. Super Admin verifies them before CRM access is enabled.

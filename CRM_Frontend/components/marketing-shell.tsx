@@ -1,5 +1,6 @@
 "use client";
 
+import { BrandLogo } from "@/components/brand-logo";
 import { cn } from "@/lib/utils";
 import { Menu, X } from "lucide-react";
 import { DM_Sans, Syne } from "next/font/google";
@@ -33,8 +34,8 @@ export function MarketingShell({ children, className }: { children: ReactNode; c
     >
       <header className="sticky top-0 z-40 border-b border-[#14212B]/10 bg-[#F6F3EE]/90 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
-          <Link href="/" className="font-[family-name:var(--font-syne)] text-lg font-extrabold tracking-tight text-[#0B3D4A]">
-            Trackbook <span className="text-[#E85D4C]">CRM</span>
+          <Link href="/" className="inline-flex items-center">
+            <BrandLogo size={36} showText priority />
           </Link>
           <nav className="hidden items-center gap-6 md:flex">
             {NAV.map((n) => (
@@ -84,7 +85,7 @@ export function MarketingShell({ children, className }: { children: ReactNode; c
       <footer className="border-t border-[#14212B]/10 bg-[#0B3D4A] text-[#F6F3EE]">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-3">
           <div>
-            <p className="font-[family-name:var(--font-syne)] text-xl font-extrabold">Trackbook CRM</p>
+            <BrandLogo size={40} showText textClassName="text-[#F6F3EE]" />
             <p className="mt-2 max-w-sm text-sm text-[#F6F3EE]/75">
               Multi-project sales CRM for field teams — leads, visits, verification, and org control under one roof.
             </p>

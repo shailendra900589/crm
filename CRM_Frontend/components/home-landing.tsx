@@ -78,15 +78,25 @@ export function HomeLanding() {
             <Sparkles className="h-3.5 w-3.5 text-[#E85D4C]" />
             Sales operations platform
           </motion.p>
-          <motion.h1
+          <motion.div
             custom={1}
             variants={fadeUp}
             initial="hidden"
             animate="show"
-            className="max-w-3xl font-[family-name:var(--font-syne)] text-5xl font-extrabold leading-[0.95] tracking-tight text-white sm:text-6xl lg:text-7xl"
+            className="flex items-center gap-4"
           >
-            Trackbook CRM
-          </motion.h1>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/trackbook-crm.png"
+              alt="Trackbook CRM"
+              width={88}
+              height={88}
+              className="rounded-2xl shadow-xl shadow-black/25"
+            />
+            <h1 className="max-w-3xl font-[family-name:var(--font-syne)] text-5xl font-extrabold leading-[0.95] tracking-tight text-white sm:text-6xl lg:text-7xl">
+              Trackbook CRM
+            </h1>
+          </motion.div>
           <motion.p
             custom={2}
             variants={fadeUp}

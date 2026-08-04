@@ -1,9 +1,10 @@
 "use client";
 
 import { useTheme } from "@/app/providers";
+import { BrandLogo } from "@/components/brand-logo";
+import { Button, Card, Input } from "@/components/ui";
 import { api, isLoggedIn, saveTokens } from "@/lib/api";
 import { homeHrefForUser } from "@/lib/nav-catalog";
-import { Button, Card, Input } from "@/components/ui";
 import { Eye, EyeOff, Moon, Sun } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -67,9 +68,9 @@ export function LoginFormView() {
         {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </button>
       <Card className="w-full max-w-md">
-        <div className="mb-6 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Sales CRM</p>
-          <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-50">Multi-Project CRM</h1>
+        <div className="mb-6 flex flex-col items-center text-center">
+          <BrandLogo size={72} priority />
+          <h1 className="mt-4 text-2xl font-bold text-slate-900 dark:text-slate-50">Trackbook CRM</h1>
           <p className="mt-1 text-sm text-slate-500">Sign in to your account</p>
         </div>
 
