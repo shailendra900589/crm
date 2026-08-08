@@ -268,6 +268,70 @@ class ChangePasswordView(APIView):
         return Response({"detail": "Password updated."})
 
 
+class DeleteAccountRequestView(APIView):
+    """Play Store / DPDP: in-app account deletion request for the signed-in user."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .audit import log_audit
+        from .models import Notification
+
+        user = request.user
+        if user.role == User.Role.SUPERADMIN:
+            return Response(
+                {"detail": "Super Admin accounts cannot be self-deleted. Contact platform support."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        confirm = (request.data.get("confirm") or "").strip().lower()
+        if confirm not in ("delete", "yes", "confirm"):
+            return Response(
+                {"detail": 'Send confirm="delete" to permanently deactivate this account.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.is_active = False
+        if hasattr(user, "is_active_user"):
+            user.is_active_user = False
+            user.save(update_fields=["is_active", "is_active_user"])
+        else:
+            user.save(update_fields=["is_active"])
+
+        # Notify org admins when possible
+        try:
+            from .models import User as CrmUser
+
+            admins = CrmUser.objects.filter(
+                organization_id=user.organization_id,
+                role=CrmUser.Role.ADMIN,
+                is_active=True,
+            )[:10]
+            for admin in admins:
+                Notification.objects.create(
+                    user=admin,
+                    message=f"Account deletion requested / completed for {user.username}.",
+                    link="/admin/users",
+                )
+        except Exception:
+            pass
+
+        log_audit(
+            user,
+            action="user.account_deleted",
+            entity_type="User",
+            entity_id=user.id,
+            message=f"User {user.username} deleted/deactivated their account from mobile app",
+        )
+        return Response(
+            {
+                "detail": "Your account has been deactivated. Associated personal access is removed. "
+                "Organisation-held CRM records may be retained by your company Admin as described in the Privacy Policy.",
+                "deleted": True,
+            }
+        )
+
+
 class GlobalSearchView(APIView):
     permission_classes = [IsAuthenticated]
 

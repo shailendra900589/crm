@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/account/account_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/followups/followups_screen.dart';
 import '../features/form/dynamic_form_screen.dart';
@@ -52,6 +53,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/notifications',
         parentNavigatorKey: _rootKey,
         builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: '/account',
+        parentNavigatorKey: _rootKey,
+        builder: (context, state) => const AccountScreen(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) => MainShell(navigationShell: navigationShell),

@@ -1,0 +1,67 @@
+================================================================================
+TRACKBOOK CRM — GOOGLE PLAY STORE LISTING COPY
+Paste these into Play Console → Grow → Store presence → Main store listing
+================================================================================
+
+App name:
+Trackbook CRM
+
+Short description (max 80 characters):
+Field CRM for Manager, TL & BDM — leads, visits, live forms.
+
+Full description:
+Trackbook CRM is the mobile workdesk for field sales teams.
+
+Built for Manager, Team Lead, BDM and Ops users to manage leads, follow-ups, visits and onboarding forms on the go — synced with your company’s Trackbook CRM on the web.
+
+KEY FEATURES
+• Live Form Builder sync — Admin updates forms on web; field staff get the latest schema automatically
+• Fresh Direct onboarding — create and submit merchant forms without hunting for an existing lead
+• My / Team leads — Managers & TLs see team pipeline; BDMs see their own book
+• Follow-ups & visits — due today, overdue, complete assigned visits
+• Call log, status, product & activity on each lead
+• Secure login with role-based access
+• Camera / gallery upload for form documents
+
+WHO IT’S FOR
+Authorised employees of companies that use Trackbook CRM (Newish Technology). This is not a consumer social app.
+
+PRIVACY & ACCOUNT
+• Privacy Policy: https://crm.trackbook.co/privacy
+• Terms: https://crm.trackbook.co/terms
+• Delete account in-app: More → Account & Privacy → Delete my account
+• Or request deletion: https://crm.trackbook.co/privacy#account-deletion
+• Contact: privacy@trackbook.co
+• Office: D-1012/13, Indira Nagar, Lucknow, Uttar Pradesh, 226016
+
+Operator: Newish Technology
+
+================================================================================
+GRAPHICS YOU MUST UPLOAD
+================================================================================
+1) App icon — 512 x 512 PNG
+   Use: CRM_Frontend/public/icon-512.png  OR  Trackbookcrm.png (export square)
+
+2) Feature graphic — 1024 x 500 PNG
+   Design: blue background (#0A66FF style) + Trackbook logo + text “Trackbook CRM”
+   (Create in Canva / Figma — not auto-generated here)
+
+3) Phone screenshots — at least 2 (recommend 4–6)
+   Capture from phone/emulator:
+   - Login with logo
+   - Home / KPIs
+   - Leads list
+   - Onboarding form
+   - More → Account & Privacy (shows Privacy Policy)
+
+================================================================================
+DATA SAFETY QUICK ANSWERS
+================================================================================
+- Does app collect personal data? YES (account + CRM data entered by users)
+- Is data encrypted in transit? YES
+- Do users create accounts? Accounts are created by company Admins; users sign in
+- Can users request deletion? YES (in-app + web)
+- Are there ads? NO
+- Is data sold? NO
+- Location: declare only if you enable GPS features; current policy = foreground only when enabled
+- Photos/files: collected when user uploads for CRM forms / documents

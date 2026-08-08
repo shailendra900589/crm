@@ -23,7 +23,11 @@ export function LegalPage({
           {children}
         </article>
         <p className="mt-10 text-sm text-[#14212B]/60">
-          Questions? Contact your Super Admin or reach us via your registered company email.{" "}
+          Privacy requests:{" "}
+          <a href="mailto:privacy@trackbook.co" className="font-semibold text-[#0B3D4A] underline">
+            privacy@trackbook.co
+          </a>
+          . Or contact your company Admin / Super Admin.{" "}
           <Link href="/" className="font-semibold text-[#0B3D4A] underline">
             Back to home
           </Link>

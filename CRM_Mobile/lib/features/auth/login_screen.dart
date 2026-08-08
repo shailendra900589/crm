@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/open_url.dart';
 import '../../core/widgets/brand_logo.dart';
 import '../../providers/auth_provider.dart';
 
@@ -102,6 +104,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         onPressed: auth.loading ? null : _submit,
                         child: Text(auth.loading ? 'Signing in…' : 'Sign in'),
                       ),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        children: [
+                          TextButton(
+                            onPressed: () => openExternalUrl(AppConfig.privacyUrl),
+                            child: const Text('Privacy Policy'),
+                          ),
+                          TextButton(
+                            onPressed: () => openExternalUrl(AppConfig.termsUrl),
+                            child: const Text('Terms'),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -113,3 +130,4 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 }
+

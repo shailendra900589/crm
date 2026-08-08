@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/open_url.dart';
 import '../../core/widgets/brand_logo.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/field_provider.dart';
@@ -56,6 +57,18 @@ class MoreScreen extends ConsumerWidget {
               badge: unread,
               onTap: () => context.push('/notifications'),
             ),
+          _tile(
+            icon: Icons.manage_accounts_outlined,
+            title: 'Account & Privacy',
+            subtitle: 'Privacy Policy, Terms, delete account',
+            onTap: () => context.push('/account'),
+          ),
+          _tile(
+            icon: Icons.privacy_tip_outlined,
+            title: 'Privacy Policy',
+            subtitle: 'Open on website',
+            onTap: () => openExternalUrl(AppConfig.privacyUrl),
+          ),
           _tile(
             icon: Icons.sync_rounded,
             title: 'Refresh form schema',

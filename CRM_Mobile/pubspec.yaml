@@ -1,7 +1,7 @@
 name: crm_mobile
 description: Trackbook CRM field app for Manager, TL, BDM, Ops.
 publish_to: 'none'
-version: 1.0.1+2
+version: 1.0.2+3
 
 environment:
   sdk: ^3.12.1
@@ -16,6 +16,7 @@ dependencies:
   intl: ^0.20.3
   shared_preferences: ^2.5.5
   image_picker: ^1.2.0
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
