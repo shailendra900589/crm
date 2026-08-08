@@ -109,3 +109,7 @@ Confirm:
 ## Package summary for reviewers
 
 **Trackbook CRM** is a B2B field sales CRM for Manager / TL / BDM / Ops. Accounts are created by company Admins (not public self-signup in the mobile app). Users can delete/deactivate their own login in-app. Camera/photos are used only for CRM document upload. No ads. Operator: Newish Technology, Lucknow.
+
+## Release signing (fixed)
+Upload only: releases\trackbook-crm.aab (release-signed, version 1.0.3+4)
+Key backup (DO NOT LOSE): releases\UPLOAD_KEY_BACKUP.txt + trackbook-upload.jks
