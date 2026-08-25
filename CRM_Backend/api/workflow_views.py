@@ -115,6 +115,7 @@ def _unique_slug(base: str) -> str:
 class RegisterOrganizationView(APIView):
     """Public company registration → pending Super Admin document verify + approval."""
 
+    authentication_classes = []  # ignore stale JWTs from browser localStorage
     permission_classes = [AllowAny]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
@@ -138,6 +139,13 @@ class RegisterOrganizationView(APIView):
         if not accept_terms:
             return Response(
                 {"detail": "Please accept Terms & Conditions and Privacy Policy to register."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        gst = request.FILES.get("gst_certificate")
+        pan = request.FILES.get("pan_card")
+        if not gst or not pan:
+            return Response(
+                {"detail": "GST certificate and Company PAN are required."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if User.objects.filter(username=admin_username).exists():

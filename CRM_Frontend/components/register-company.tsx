@@ -2,11 +2,11 @@
 
 import { MarketingShell } from "@/components/marketing-shell";
 import { Button, Input } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, clearTokens } from "@/lib/api";
 import { useMutation } from "@tanstack/react-query";
 import { Building2, FileUp } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const DOC_FIELDS: { key: string; label: string; hint: string }[] = [
   { key: "gst_certificate", label: "GST certificate", hint: "PDF / image" },
@@ -30,6 +30,11 @@ export function RegisterCompanyView() {
   });
   const [files, setFiles] = useState<Record<string, File | null>>({});
   const [done, setDone] = useState(false);
+
+  // Stale JWTs in localStorage make public register fail with JWT auth errors.
+  useEffect(() => {
+    clearTokens();
+  }, []);
 
   const register = useMutation({
     mutationFn: () => {

@@ -126,16 +126,23 @@ async function refreshToken(): Promise<boolean> {
   }
 }
 
-async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  retry = true,
+  opts: { skipAuth?: boolean } = {},
+): Promise<T> {
   const headers = new Headers(options.headers);
   const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
+  // Public endpoints must not send stale JWTs — SimpleJWT rejects invalid Bearer tokens
+  // even on AllowAny views ("Given token not valid for any token type").
+  if (!opts.skipAuth && token) headers.set("Authorization", `Bearer ${token}`);
   if (!(options.body instanceof FormData)) headers.set("Content-Type", "application/json");
 
   const res = await fetch(`${API}${path}`, { ...options, headers });
-  if (res.status === 401 && retry) {
+  if (res.status === 401 && retry && !opts.skipAuth) {
     const ok = await refreshToken();
-    if (ok) return request<T>(path, options, false);
+    if (ok) return request<T>(path, options, false, opts);
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -235,11 +242,15 @@ export const api = {
     request<{ detail: string; organization: Organization; documents_uploaded?: number }>(
       `/api/public/register-organization/`,
       { method: "POST", body: JSON.stringify(data) },
+      true,
+      { skipAuth: true },
     ),
   registerOrganizationForm: (form: FormData) =>
     request<{ detail: string; organization: Organization; documents_uploaded?: number }>(
       `/api/public/register-organization/`,
       { method: "POST", body: form },
+      true,
+      { skipAuth: true },
     ),
   organizationDocuments: (id: number) =>
     request<{ docs_verification_status: string; docs_rejection_reason: string; results: OrganizationDocument[] }>(
