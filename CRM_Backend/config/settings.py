@@ -86,16 +86,21 @@ try:
 except ImportError:
     CELERY_BEAT_SCHEDULE = {}
 
-# Email — console backend by default (prints to server log). Set SMTP_* for real delivery.
-EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+# Email — Gmail SMTP (Trackbook CRM). Override via env if needed.
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "hrms.p.lko@gmail.com")
+# Gmail app password (spaces optional in env)
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "lgtt ifsx febn nytu").replace(" ", "")
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Amazon Merchant CRM <noreply@crm.local>")
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    f"Trackbook CRM <{EMAIL_HOST_USER}>",
+)
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://127.0.0.1:3000")
 DIGEST_ENABLED = os.getenv("DIGEST_ENABLED", "1") == "1"
+PASSWORD_RESET_OTP_MINUTES = int(os.getenv("PASSWORD_RESET_OTP_MINUTES", "15"))
 
 AUTH_USER_MODEL = "api.User"
 

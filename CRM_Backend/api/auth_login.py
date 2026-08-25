@@ -96,6 +96,8 @@ class CRMTokenObtainPairSerializer(TokenObtainPairSerializer):
             )
 
         user = User.objects.filter(username__iexact=raw_username).first()
+        if user is None and "@" in raw_username:
+            user = User.objects.filter(email__iexact=raw_username).order_by("id").first()
         if user is None or not user.check_password(password):
             raise AuthenticationFailed(
                 "No active account found with the given credentials",

@@ -186,6 +186,38 @@ export const api = {
     return res.json() as Promise<Tokens>;
   },
 
+  forgotPassword: async (identifier: string) => {
+    const res = await fetch(`${API}/api/auth/forgot-password/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: identifier.trim() }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { detail?: string; email_hint?: string };
+    if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Could not send OTP");
+    return data;
+  },
+
+  resetPassword: async (data: {
+    identifier: string;
+    otp: string;
+    new_password: string;
+    confirm_password: string;
+  }) => {
+    const res = await fetch(`${API}/api/auth/reset-password/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: data.identifier.trim(),
+        otp: data.otp.trim(),
+        new_password: data.new_password,
+        confirm_password: data.confirm_password,
+      }),
+    });
+    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Password reset failed");
+    return body;
+  },
+
   /** Exchange Trackbook HRMS SSO ticket for CRM JWT (iframe / mobile embed). */
   loginWithTrackbookSso: async (ticket: string) => {
     const res = await fetch(`${API}/api/auth/hrms-sso/`, {

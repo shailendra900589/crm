@@ -188,12 +188,23 @@ class RegisterOrganizationView(APIView):
                 message=f"New company registration: {org.name} — verify corporate docs ({docs_count} files), then approve",
                 link="/admin/organizations",
             )
+        import secrets
+
+        from .mailer import send_registration_success_email
+
+        reg_otp = f"{secrets.randbelow(1_000_000):06d}"
+        send_registration_success_email(
+            to_email=email,
+            company_name=org.name,
+            username=admin_username,
+            otp=reg_otp,
+        )
         org.refresh_from_db()
         return Response(
             {
                 "detail": (
-                    "Registration received. Super Admin will verify your corporate documents, "
-                    "then enable trial or paid access."
+                    "Registration received. Check your email for the confirmation OTP. "
+                    "Super Admin will verify your corporate documents, then enable trial or paid access."
                 ),
                 "organization": OrganizationSerializer(org).data,
                 "documents_uploaded": docs_count,

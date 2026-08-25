@@ -506,3 +506,20 @@ class RolePagePermission(models.Model):
     def __str__(self):
         state = "on" if self.enabled else "off"
         return f"{self.role} · {self.page_key} · {state}"
+
+
+class PasswordResetOTP(models.Model):
+    """One-time codes for forgot-password flow (emailed via SMTP)."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="password_reset_otps")
+    otp_hash = models.CharField(max_length=128)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"OTP for {self.user_id} @ {self.created_at}"

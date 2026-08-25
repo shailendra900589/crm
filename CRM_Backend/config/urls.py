@@ -6,6 +6,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from api.auth_login import CRMTokenObtainPairView
 from api.hrms_sso_views import HrmsSsoLoginView
+from api.password_reset_views import ForgotPasswordConfirmView, ForgotPasswordRequestView
 
 admin.site.site_header = "CRM Django Admin"
 admin.site.site_title = "CRM Django Admin"
@@ -17,6 +18,8 @@ urlpatterns = [
     path("api/auth/login/", CRMTokenObtainPairView.as_view()),
     path("api/auth/refresh/", TokenRefreshView.as_view()),
     path("api/auth/hrms-sso/", HrmsSsoLoginView.as_view()),
+    path("api/auth/forgot-password/", ForgotPasswordRequestView.as_view()),
+    path("api/auth/reset-password/", ForgotPasswordConfirmView.as_view()),
     path("api/", include("api.urls")),
 ]
 

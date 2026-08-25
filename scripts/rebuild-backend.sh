@@ -13,6 +13,21 @@ else
 fi
 
 echo "Rebuilding backend (+ celery) so Super Admin login code is live..."
+# Ensure Gmail SMTP is present in .env.prod (idempotent)
+if [[ -f .env.prod ]] && ! grep -q '^EMAIL_HOST_USER=' .env.prod 2>/dev/null; then
+  cat >> .env.prod <<'EOF'
+
+# --- Email (Gmail SMTP — Trackbook CRM) ---
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=hrms.p.lko@gmail.com
+EMAIL_HOST_PASSWORD=lgtt ifsx febn nytu
+EMAIL_USE_TLS=1
+DEFAULT_FROM_EMAIL=Trackbook CRM <hrms.p.lko@gmail.com>
+EOF
+  echo "Appended EMAIL_* to .env.prod"
+fi
 sudo "${DC[@]}" -f docker-compose.prod.yml --env-file .env.prod build --no-cache backend celery-worker celery-beat
 sudo "${DC[@]}" -f docker-compose.prod.yml --env-file .env.prod up -d backend celery-worker celery-beat nginx
 
