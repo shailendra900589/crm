@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 from .models import BulkUploadJob, CustomForm, FormSubmission, Lead, LeadDocument, LeadVisit, Merchant, Notification, Product, Project, SalesTarget, Team
 from .permissions import (
     can_assign_visits,
+    can_deactivate_user,
     can_manage_team,
     can_manage_user,
     can_reassign_leads,
@@ -299,6 +300,14 @@ class DeleteAccountRequestView(APIView):
             return Response(
                 {"detail": "Super Admin accounts cannot be self-deleted. Contact platform support."},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+        if user.role == User.Role.ADMIN:
+            return Response(
+                {
+                    "detail": "Company Admin accounts cannot be self-deactivated. "
+                    "Only platform Super Admin can deactivate an Admin."
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         confirm = (request.data.get("confirm") or "").strip().lower()
@@ -2408,6 +2417,21 @@ class UserViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         if instance.role == User.Role.SUPERADMIN or not can_manage_user(request.user, instance):
             raise PermissionDenied("Cannot edit this user.")
+        # Admin accounts: only Super Admin may deactivate or demote
+        if instance.role == User.Role.ADMIN and not is_superadmin(request.user):
+            if "is_active_user" in request.data:
+                incoming_active = request.data.get("is_active_user")
+                falsy = incoming_active is False or (
+                    isinstance(incoming_active, str)
+                    and incoming_active.strip().lower() in ("false", "0", "no")
+                )
+                if falsy:
+                    raise PermissionDenied(
+                        "Only Super Admin can deactivate a company Admin account."
+                    )
+            incoming_role = request.data.get("role", None)
+            if incoming_role is not None and incoming_role != User.Role.ADMIN:
+                raise PermissionDenied("Only Super Admin can change or demote an Admin role.")
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
@@ -2425,12 +2449,19 @@ class UserViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         if not is_company_admin(self.request.user):
             raise PermissionDenied("Only company Admin can edit users.")
+        instance = serializer.instance
+        if instance and instance.role == User.Role.ADMIN and not is_superadmin(self.request.user):
+            # Force-keep Admin active + Admin role even if client tampers
+            serializer.validated_data.pop("is_active_user", None)
+            if serializer.validated_data.get("role") and serializer.validated_data["role"] != User.Role.ADMIN:
+                raise PermissionDenied("Only Super Admin can change or demote an Admin role.")
+            serializer.validated_data["role"] = User.Role.ADMIN
         serializer.save()
 
     def perform_destroy(self, instance):
-        if not is_company_admin(self.request.user):
-            raise PermissionDenied("Only company Admin can deactivate users.")
-        if instance.role == User.Role.SUPERADMIN or not can_manage_user(self.request.user, instance):
+        if not can_deactivate_user(self.request.user, instance):
+            if instance.role == User.Role.ADMIN:
+                raise PermissionDenied("Only Super Admin can deactivate a company Admin account.")
             raise PermissionDenied("Cannot deactivate this user.")
         instance.is_active_user = False
         instance.is_active = False

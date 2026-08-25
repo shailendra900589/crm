@@ -145,6 +145,28 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         actor = self.context["request"].user
         if actor.role != User.Role.ADMIN and value == User.Role.ADMIN:
             raise serializers.ValidationError("Cannot assign Admin role.")
+        instance = getattr(self, "instance", None)
+        if (
+            instance
+            and instance.role == User.Role.ADMIN
+            and value != User.Role.ADMIN
+            and getattr(actor, "role", None) != User.Role.SUPERADMIN
+        ):
+            raise serializers.ValidationError("Only Super Admin can demote an Admin.")
+        return value
+
+    def validate_is_active_user(self, value):
+        actor = self.context["request"].user
+        instance = getattr(self, "instance", None)
+        if (
+            instance
+            and instance.role == User.Role.ADMIN
+            and value is False
+            and getattr(actor, "role", None) != User.Role.SUPERADMIN
+        ):
+            raise serializers.ValidationError(
+                "Only Super Admin can deactivate a company Admin account."
+            )
         return value
 
     def update(self, instance, validated_data):
@@ -153,6 +175,11 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         password = validated_data.pop("password", None)
         projects = validated_data.pop("assigned_projects", None)
         validated_data.pop("organization", None)  # keep org locked to company
+        actor = self.context["request"].user
+        # Hard lock: non–Super Admin cannot deactivate / demote Admin
+        if instance.role == User.Role.ADMIN and getattr(actor, "role", None) != User.Role.SUPERADMIN:
+            validated_data.pop("is_active_user", None)
+            validated_data["role"] = User.Role.ADMIN
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:

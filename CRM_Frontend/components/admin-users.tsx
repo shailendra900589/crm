@@ -233,7 +233,7 @@ export function AdminUsersPage() {
                     <button type="button" onClick={() => openEdit(u)} className="rounded-lg p-1.5 hover:bg-slate-100">
                       <Pencil className="h-4 w-4 text-slate-500" />
                     </button>
-                    {u.is_active_user !== false && (
+                    {u.is_active_user !== false && u.role !== "Admin" && (
                       <button
                         type="button"
                         onClick={() => confirm(`Deactivate ${u.username}?`) && deactivate.mutate(u.id)}
@@ -241,6 +241,11 @@ export function AdminUsersPage() {
                       >
                         Deactivate
                       </button>
+                    )}
+                    {u.role === "Admin" && (
+                      <span className="px-1 text-[10px] text-slate-400" title="Only Super Admin can deactivate Admin">
+                        Protected
+                      </span>
                     )}
                   </div>
                 </td>
@@ -333,12 +338,16 @@ export function AdminUsersPage() {
             </Field>
             <Field label="Role">
               <select
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
                 value={editForm.role}
+                disabled={editing?.role === "Admin"}
                 onChange={(e) => setEditForm({ ...editForm, role: e.target.value as CrmUser["role"] })}
               >
                 {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
               </select>
+              {editing?.role === "Admin" && (
+                <p className="mt-1 text-[11px] text-slate-400">Admin role can only be changed by Super Admin.</p>
+              )}
             </Field>
             <Field label="Reports To">
               <select
@@ -361,14 +370,20 @@ export function AdminUsersPage() {
               />
             </Field>
             <Field label="Status">
-              <label className="flex h-11 items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={editForm.is_active_user !== false}
-                  onChange={(e) => setEditForm({ ...editForm, is_active_user: e.target.checked })}
-                />
-                Active user
-              </label>
+              {editing?.role === "Admin" ? (
+                <p className="flex h-11 items-center text-sm text-slate-500">
+                  Active — only Super Admin can deactivate Admin
+                </p>
+              ) : (
+                <label className="flex h-11 items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editForm.is_active_user !== false}
+                    onChange={(e) => setEditForm({ ...editForm, is_active_user: e.target.checked })}
+                  />
+                  Active user
+                </label>
+              )}
             </Field>
           </div>
           <Field label="Assigned Projects">

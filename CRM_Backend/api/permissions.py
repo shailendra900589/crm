@@ -362,6 +362,30 @@ def can_manage_user(actor, target):
     return False
 
 
+def can_deactivate_user(actor, target):
+    """
+    Deactivate / disable login.
+    Company Admin accounts may only be deactivated by platform Super Admin
+    (e.g. org suspend / reject). Nobody else — including other Admins — can.
+    """
+    if not target:
+        return False
+    if target.role == User.Role.SUPERADMIN:
+        return False
+    if target.role == User.Role.ADMIN:
+        return is_superadmin(actor)
+    if is_superadmin(actor):
+        return True
+    if is_company_admin(actor):
+        if actor.organization_id and target.organization_id != actor.organization_id:
+            return False
+        # Never allow self-deactivate via Users API either for safety
+        if target.id == actor.id:
+            return False
+        return True
+    return False
+
+
 def teams_for_user(user):
     from .models import Team
 
