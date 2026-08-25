@@ -113,11 +113,15 @@ class UserCreateSerializer(serializers.ModelSerializer):
         validated_data.pop("organization", None)  # force org from actor
         if getattr(actor, "organization_id", None):
             validated_data["organization"] = actor.organization
+        # Only allow assigning projects inside the actor's organization
+        from .permissions import user_can_access_project
+
+        safe_projects = [p for p in projects if user_can_access_project(actor, p.id)]
         user = User(**validated_data)
         user.set_password(password)
         user.save()
-        if projects:
-            user.assigned_projects.set(projects)
+        if safe_projects:
+            user.assigned_projects.set(safe_projects)
         return user
 
 
@@ -157,7 +161,11 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             instance.is_active = bool(instance.is_active_user)
         instance.save()
         if projects is not None:
-            instance.assigned_projects.set(projects)
+            from .permissions import user_can_access_project
+
+            actor = self.context["request"].user
+            safe_projects = [p for p in projects if user_can_access_project(actor, p.id)]
+            instance.assigned_projects.set(safe_projects)
         return instance
 
 

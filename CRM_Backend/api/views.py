@@ -92,7 +92,14 @@ def filter_by_project(request, qs, *, field="project_id"):
 
 
 def admin_filter_leads(request, qs):
+    """Apply dashboard filters; always start from org-scoped qs (caller should use leads_for_user)."""
     qs = filter_by_project(request, qs)
+    # Extra hard clamp for company Admin (defense in depth)
+    if is_company_admin(request.user):
+        oid = getattr(request.user, "organization_id", None)
+        if not oid:
+            return qs.none()
+        qs = qs.filter(project__organization_id=oid)
     manager_id = request.query_params.get("manager")
     team_id = request.query_params.get("team")
     product_id = request.query_params.get("product")
@@ -101,12 +108,22 @@ def admin_filter_leads(request, qs):
     date_to = request.query_params.get("to")
     if manager_id:
         from .permissions import get_descendant_ids
-        ids = get_descendant_ids(User.objects.get(id=manager_id))
+        try:
+            manager = User.objects.get(id=manager_id)
+        except User.DoesNotExist:
+            return qs.none()
+        if is_company_admin(request.user) and request.user.organization_id:
+            if manager.organization_id != request.user.organization_id:
+                return qs.none()
+        ids = get_descendant_ids(manager)
         ids.add(int(manager_id))
         qs = qs.filter(bdm_id__in=ids)
     if team_id:
         team = Team.objects.filter(id=team_id).prefetch_related("members").first()
         if team:
+            if is_company_admin(request.user) and request.user.organization_id:
+                if getattr(team.project, "organization_id", None) != request.user.organization_id:
+                    return qs.none()
             member_ids = list(team.members.values_list("id", flat=True))
             qs = qs.filter(bdm_id__in=member_ids)
     if product_id:
@@ -505,6 +522,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only Admin can add products.")
         name = serializer.validated_data["name"]
         project = serializer.validated_data["project"]
+        if not user_can_access_project(self.request.user, project.id):
+            raise PermissionDenied("Project is outside your organization.")
         slug = slugify(name)
         base, i = slug, 1
         while Product.objects.filter(project=project, slug=slug).exists():
@@ -747,7 +766,9 @@ class AdminDashboardView(APIView):
         if not is_admin(request.user):
             raise PermissionDenied("Only Admin can access the organization dashboard.")
 
-        all_leads = admin_filter_leads(request, Lead.objects.select_related("project", "bdm", "merchant", "product"))
+        # Strict tenant scope: company Admin only sees their organization
+        base_leads = leads_for_user(request.user).select_related("project", "bdm", "merchant", "product")
+        all_leads = admin_filter_leads(request, base_leads)
         total_leads = all_leads.count()
         confirmed = all_leads.filter(status=Lead.Status.ORDER_CONFIRMED).count()
         due_today = all_leads.filter(follow_up_date=date.today()).count()
@@ -757,12 +778,20 @@ class AdminDashboardView(APIView):
         total_companies = all_leads.values("merchant_id").distinct().count()
 
         project_filter = request.query_params.get("project")
-        projects = Project.objects.annotate(
+        projects = projects_for_user(request.user).annotate(
             lead_count=Count("leads"),
             confirmed_count=Count("leads", filter=Q(leads__status=Lead.Status.ORDER_CONFIRMED)),
         ).order_by("name")
         if project_filter:
-            projects = projects.filter(id=project_filter)
+            try:
+                pid = int(project_filter)
+            except (TypeError, ValueError):
+                projects = projects.none()
+            else:
+                if not user_can_access_project(request.user, pid):
+                    projects = projects.none()
+                else:
+                    projects = projects.filter(id=pid)
 
         project_stats = [
             {
@@ -798,7 +827,8 @@ class AdminDashboardView(APIView):
             for row in company_rows
         ]
 
-        products_qs = Product.objects.select_related("project")
+        org_project_ids = list(projects_for_user(request.user).values_list("id", flat=True))
+        products_qs = Product.objects.select_related("project").filter(project_id__in=org_project_ids or [-1])
         if project_filter:
             products_qs = products_qs.filter(project_id=project_filter)
         product_catalog = {p.id: p for p in products_qs}
@@ -836,9 +866,15 @@ class AdminDashboardView(APIView):
                 })
         product_stats.sort(key=lambda x: (-x["lead_count"], x["name"]))
 
+        team_qs = User.objects.filter(role=User.Role.BDM, is_active_user=True)
+        if is_company_admin(request.user) and request.user.organization_id:
+            team_qs = team_qs.filter(organization_id=request.user.organization_id)
+        elif is_superadmin(request.user):
+            pass
+        else:
+            team_qs = team_qs.none()
         team = (
-            User.objects.filter(role=User.Role.BDM)
-            .annotate(
+            team_qs.annotate(
                 lead_count=Count("leads"),
                 confirmed=Count("leads", filter=Q(leads__status=Lead.Status.ORDER_CONFIRMED)),
             )
@@ -860,22 +896,24 @@ class AdminDashboardView(APIView):
 
         today = date.today()
         visits_qs = (
-            LeadVisit.objects.filter(status=LeadVisit.Status.SCHEDULED, scheduled_date__gte=today)
+            visits_for_user(request.user)
+            .filter(status=LeadVisit.Status.SCHEDULED, scheduled_date__gte=today)
             .select_related("lead", "assigned_to", "lead__merchant", "lead__project")
             .order_by("scheduled_date")
         )
         sub_qs = FormSubmission.objects.select_related(
             "lead", "lead__merchant", "lead__project", "lead__bdm", "submitted_by", "custom_form"
         ).order_by("-submitted_at")
-        # Prefer rows that actually have answers (hide empty shell submissions)
-        if request.user.organization_id and is_company_admin(request.user):
+        if is_company_admin(request.user):
             oid = request.user.organization_id
-            sub_qs = sub_qs.filter(
-                Q(lead__project__organization_id=oid)
-                | Q(lead__project__organization_id__isnull=True)
-                | Q(lead__bdm__organization_id=oid)
-                | Q(lead__bdm__organization_id__isnull=True)
-            )
+            if not oid:
+                sub_qs = sub_qs.none()
+            else:
+                sub_qs = sub_qs.filter(lead__project__organization_id=oid)
+        elif is_superadmin(request.user):
+            pass
+        else:
+            sub_qs = sub_qs.none()
         if project_filter:
             visits_qs = visits_qs.filter(lead__project_id=project_filter)
             sub_qs = sub_qs.filter(custom_form__project_id=project_filter)
@@ -890,7 +928,13 @@ class AdminDashboardView(APIView):
 
         project_name = None
         if project_filter:
-            project_name = Project.objects.filter(id=project_filter).values_list("name", flat=True).first()
+            project_name = projects_for_user(request.user).filter(id=project_filter).values_list("name", flat=True).first()
+
+        bdm_count_qs = User.objects.filter(role=User.Role.BDM, is_active_user=True)
+        tl_count_qs = User.objects.filter(role=User.Role.TL, is_active_user=True)
+        if is_company_admin(request.user) and request.user.organization_id:
+            bdm_count_qs = bdm_count_qs.filter(organization_id=request.user.organization_id)
+            tl_count_qs = tl_count_qs.filter(organization_id=request.user.organization_id)
 
         payload = {
             "total_projects": projects.count(),
@@ -902,8 +946,8 @@ class AdminDashboardView(APIView):
             "follow_ups_due_today": due_today,
             "overdue_follow_ups": overdue,
             "conversion_rate": round((confirmed / total_leads * 100) if total_leads else 0, 1),
-            "total_bdm": User.objects.filter(role=User.Role.BDM).count(),
-            "total_tl": User.objects.filter(role=User.Role.TL).count(),
+            "total_bdm": bdm_count_qs.count(),
+            "total_tl": tl_count_qs.count(),
             "project_stats": project_stats,
             "company_stats": company_stats,
             "product_stats": product_stats,
@@ -968,7 +1012,7 @@ class AdminExportView(APIView):
         fmt = (request.query_params.get("format") or "xlsx").lower()
         leads_qs = admin_filter_leads(
             request,
-            Lead.objects.select_related("project", "bdm", "merchant", "product").prefetch_related(
+            leads_for_user(request.user).select_related("project", "bdm", "merchant", "product").prefetch_related(
                 "form_submissions", "form_submissions__custom_form"
             ),
         )
@@ -2186,10 +2230,18 @@ class TeamViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if not can_manage_team(self.request.user):
             raise PermissionDenied("Only Admin, Manager or TL can create teams.")
+        project = serializer.validated_data.get("project")
+        if project and not user_can_access_project(self.request.user, project.id):
+            raise PermissionDenied("Project is outside your organization.")
         manager = self.request.user
         if is_admin(self.request.user) and serializer.validated_data.get("manager"):
             manager = serializer.validated_data["manager"]
+            if is_company_admin(self.request.user) and self.request.user.organization_id:
+                if manager.organization_id != self.request.user.organization_id:
+                    raise PermissionDenied("Manager is outside your organization.")
         members = serializer.validated_data.pop("members", [])
+        if is_company_admin(self.request.user) and self.request.user.organization_id:
+            members = [m for m in members if m.organization_id == self.request.user.organization_id]
         team = serializer.save(manager=manager)
         if members:
             team.members.set(members)
@@ -2204,8 +2256,10 @@ class TeamViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def reporting(self, request, pk=None):
         team = self.get_object()
+        if not user_can_access_project(request.user, team.project_id):
+            raise PermissionDenied("Team project is outside your organization.")
         member_ids = list(team.members.values_list("id", flat=True))
-        leads = Lead.objects.filter(project=team.project, bdm_id__in=member_ids)
+        leads = leads_for_user(request.user).filter(project=team.project, bdm_id__in=member_ids)
         total = leads.count()
         confirmed = leads.filter(status=Lead.Status.ORDER_CONFIRMED).count()
         leaderboard = (
@@ -2271,7 +2325,13 @@ class ManagerDrilldownView(APIView):
     def get(self, request, manager_id):
         if not is_admin(request.user):
             raise PermissionDenied("Admin only.")
-        manager = User.objects.get(id=manager_id)
+        try:
+            manager = User.objects.get(id=manager_id)
+        except User.DoesNotExist:
+            raise PermissionDenied("Manager not found.")
+        if is_company_admin(request.user):
+            if not request.user.organization_id or manager.organization_id != request.user.organization_id:
+                raise PermissionDenied("Manager is outside your organization.")
         leads = filter_by_project(request, leads_for_user(manager))
         return Response({
             "manager": UserSerializer(manager).data,
@@ -2400,6 +2460,13 @@ class AuditLogListView(APIView):
         from .serializers import AuditLogSerializer
 
         qs = AuditLog.objects.select_related("actor").all()
+        if is_company_admin(request.user):
+            oid = request.user.organization_id
+            if not oid:
+                qs = qs.none()
+            else:
+                # Only logs by actors in this organization (platform SuperAdmin logs hidden)
+                qs = qs.filter(actor__organization_id=oid)
         action = request.query_params.get("action")
         entity_type = request.query_params.get("entity_type")
         actor = request.query_params.get("actor")
@@ -2438,19 +2505,22 @@ class FormSubmissionsRecentView(APIView):
 
         if is_company_admin(request.user) and request.user.organization_id:
             oid = request.user.organization_id
-            qs = qs.filter(
-                Q(lead__project__organization_id=oid)
-                | Q(lead__project__organization_id__isnull=True)
-                | Q(lead__bdm__organization_id=oid)
-                | Q(lead__bdm__organization_id__isnull=True)
-            )
+            qs = qs.filter(lead__project__organization_id=oid)
+        elif is_company_admin(request.user):
+            qs = qs.none()
+        elif is_superadmin(request.user):
+            pass
         elif request.user.role in (User.Role.MANAGER, User.Role.TL):
             ids = get_descendant_ids(request.user)
             ids.add(request.user.id)
             qs = qs.filter(Q(submitted_by_id__in=ids) | Q(lead__bdm_id__in=ids))
+            if request.user.organization_id:
+                qs = qs.filter(lead__project__organization_id=request.user.organization_id)
         elif request.user.role == User.Role.OPS:
             lead_ids = verification_works_for_user(request.user).values_list("lead_id", flat=True)
             qs = qs.filter(lead_id__in=lead_ids)
+        else:
+            qs = qs.none()
 
         project = request.query_params.get("project")
         if project:
