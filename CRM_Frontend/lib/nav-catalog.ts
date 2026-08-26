@@ -51,6 +51,7 @@ export const ADMIN_NAV: NavEntry[] = [
   { pageKey: "admin.permissions", href: "/admin/permissions", icon: KeyRound, labels: { default: "Roles" } },
   { pageKey: "admin.audit", href: "/admin/audit", icon: ClipboardList, labels: { default: "Audit Log" } },
   { pageKey: "verification", href: "/verification", icon: ClipboardCheck, labels: { default: "Verification" } },
+  { pageKey: "leads", href: "/leads", icon: Target, labels: { default: "Leads" } },
   { pageKey: "team", href: "/team", icon: Users, labels: { default: "Teams" } },
   { pageKey: "reports", href: "/reports", icon: BarChart3, labels: { default: "Org Reports" } },
   { pageKey: "profile", href: "/profile", icon: UserRound, labels: { default: "Profile" } },
@@ -147,6 +148,10 @@ export function homeHrefForUser(role: AppRole, allowedPages?: string[] | null) {
 export function canAccessPage(role: AppRole, pageKey: string, allowedPages?: string[] | null) {
   if (role === "SuperAdmin") {
     return pageKey === "admin.organizations" || pageKey === "admin.packages" || pageKey === "profile";
+  }
+  // Company Admin always needs leads + verification for desk ops
+  if (role === "Admin" && (pageKey === "leads" || pageKey === "verification" || pageKey === "admin.permissions" || pageKey === "profile")) {
+    return true;
   }
   // Company Admin + field roles: Super Admin package / module entitlements via allowed_pages
   if (!allowedPages) return false;
