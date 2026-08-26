@@ -39,12 +39,6 @@ export function VerificationQueueView() {
   const canAssign = !!me && ["Admin", "SuperAdmin", "Manager", "TL"].includes(me.role);
   const list = useMemo(() => works || [], [works]);
 
-  const canVerifyWork = (w: VerificationWork) => {
-    if (["done", "rejected"].includes(w.status)) return false;
-    if (canAssign) return true; // Admin / Manager / TL can verify any open work
-    return !!w.assigned_to && (w.assigned_to === me?.id || w.status === "in_progress" || w.status === "assigned");
-  };
-
   const assign = useMutation({
     mutationFn: () =>
       api.assignVerification(selected!.id, {
@@ -77,10 +71,6 @@ export function VerificationQueueView() {
   });
 
   const assigneeOptions = [...(assignees?.ops || []), ...(assignees?.team || [])];
-  const showVerifyActions =
-    !!selected &&
-    canVerifyWork(selected) &&
-    ["open", "reopened", "assigned", "in_progress"].includes(selected.status);
 
   return (
     <div className="mx-auto max-w-[1100px] space-y-4">
@@ -90,7 +80,7 @@ export function VerificationQueueView() {
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-200/80">Workflow</p>
             <h1 className="mt-1 text-xl font-bold sm:text-2xl">Verification desk</h1>
             <p className="mt-1 max-w-xl text-xs text-slate-300 sm:text-sm">
-              Review submitted forms, verify leads here, or assign Ops. Open lead opens the full lead record.
+              BDM submits docs → Manager/TL assigns Ops → Ops completes → status on dashboard.
             </p>
           </div>
           <ClipboardCheck className="h-10 w-10 text-blue-300/70" />
@@ -179,32 +169,10 @@ export function VerificationQueueView() {
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {canVerifyWork(w) && (
-                    <Button
-                      className="h-8 gap-1.5 bg-emerald-600 text-xs hover:bg-emerald-700"
-                      onClick={() => {
-                        setNotes("");
-                        setSelected(w);
-                      }}
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Verify
-                    </Button>
-                  )}
-                  <Link
-                    href={`/leads?lead=${w.lead}`}
-                    className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
+                  <Link href={`/leads?lead=${w.lead}`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300">
                     Open lead
                   </Link>
-                  <Button
-                    variant="outline"
-                    className="h-8 text-xs"
-                    onClick={() => {
-                      setNotes("");
-                      setSelected(w);
-                    }}
-                  >
+                  <Button variant="outline" className="h-8 text-xs" onClick={() => setSelected(w)}>
                     Actions
                   </Button>
                 </div>
@@ -246,40 +214,9 @@ export function VerificationQueueView() {
               </div>
             )}
 
-            {showVerifyActions && (
-              <div className="mt-4 space-y-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 dark:border-emerald-500/30 dark:bg-emerald-500/10">
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-200">
-                  Verify this lead
-                </p>
-                <Input
-                  placeholder="Verification notes (optional)"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
-                    disabled={act.isPending}
-                    onClick={() => act.mutate({ id: selected.id, action: "complete" })}
-                  >
-                    <CheckCircle2 className="h-4 w-4" />
-                    {act.isPending ? "Saving…" : "Approve / Verify"}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    className="gap-1.5"
-                    disabled={act.isPending}
-                    onClick={() => act.mutate({ id: selected.id, action: "reject" })}
-                  >
-                    <XCircle className="h-4 w-4" /> Reject
-                  </Button>
-                </div>
-              </div>
-            )}
-
             {canAssign && ["open", "reopened", "assigned"].includes(selected.status) && (
               <div className="mt-4 space-y-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Or assign to Ops / team</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Assign office employee</p>
                 <select
                   value={assigneeId}
                   onChange={(e) => setAssigneeId(e.target.value)}
@@ -304,30 +241,37 @@ export function VerificationQueueView() {
               </div>
             )}
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              {selected.assigned_to && selected.status === "assigned" && (
-                <Button className="gap-1.5" onClick={() => act.mutate({ id: selected.id, action: "start" })}>
-                  <Play className="h-4 w-4" /> Start
-                </Button>
+            <div className="mt-4 space-y-2">
+              <Input placeholder="Completion / reject notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+              <div className="flex flex-wrap gap-2">
+                {selected.assigned_to && selected.status === "assigned" && (
+                  <Button className="gap-1.5" onClick={() => act.mutate({ id: selected.id, action: "start" })}>
+                    <Play className="h-4 w-4" /> Start
+                  </Button>
+                )}
+                {["assigned", "in_progress", "reopened"].includes(selected.status) && (
+                  <Button className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => act.mutate({ id: selected.id, action: "complete" })}>
+                    <CheckCircle2 className="h-4 w-4" /> Complete & approve
+                  </Button>
+                )}
+                {selected.status !== "rejected" && selected.status !== "done" && (
+                  <Button variant="danger" className="gap-1.5" onClick={() => act.mutate({ id: selected.id, action: "reject" })}>
+                    <XCircle className="h-4 w-4" /> Reject
+                  </Button>
+                )}
+                {canAssign && ["done", "rejected"].includes(selected.status) && (
+                  <Button variant="outline" className="gap-1.5" onClick={() => act.mutate({ id: selected.id, action: "reopen" })}>
+                    <RotateCcw className="h-4 w-4" /> Reopen
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
+              </div>
+              {(assign.isError || act.isError) && (
+                <p className="text-sm text-rose-600">
+                  {(assign.error as Error)?.message || (act.error as Error)?.message || "Action failed"}
+                </p>
               )}
-              {canAssign && ["done", "rejected"].includes(selected.status) && (
-                <Button variant="outline" className="gap-1.5" onClick={() => act.mutate({ id: selected.id, action: "reopen" })}>
-                  <RotateCcw className="h-4 w-4" /> Reopen
-                </Button>
-              )}
-              <Link
-                href={`/leads?lead=${selected.lead}`}
-                className="inline-flex h-10 items-center rounded-xl border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200"
-              >
-                Open lead
-              </Link>
-              <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
             </div>
-            {(assign.isError || act.isError) && (
-              <p className="mt-2 text-sm text-rose-600">
-                {(assign.error as Error)?.message || (act.error as Error)?.message || "Action failed"}
-              </p>
-            )}
           </div>
         </div>
       )}

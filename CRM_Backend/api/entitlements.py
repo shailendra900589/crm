@@ -153,9 +153,13 @@ def ensure_org_entitlements(org):
             org.package = pkg
             changed = True
         modules = sanitize_modules((pkg.module_keys if pkg else None) or default_common_modules())
-    # Company Admin must always manage Roles
+    # Company Admin must always manage Roles + open leads from Verification
     if "admin.permissions" not in modules:
         modules.append("admin.permissions")
+    if "leads" not in modules:
+        modules.append("leads")
+    if "verification" not in modules:
+        modules.append("verification")
     if "profile" not in modules:
         modules.append("profile")
     modules = sanitize_modules(modules)

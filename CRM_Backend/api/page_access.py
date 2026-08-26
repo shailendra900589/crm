@@ -64,7 +64,6 @@ ADMIN_PAGE_KEYS = [
     "admin.audit",
     "admin.permissions",
     "verification",
-    "leads",
     "team",
     "reports",
     "profile",
@@ -105,8 +104,7 @@ def allowed_pages_for_user(user):
 
     if user.role == User.Role.ADMIN:
         pages = [k for k in ADMIN_PAGE_KEYS if k in org_modules]
-        # Always available for company Admin day-to-day ops
-        for always in ("admin.permissions", "verification", "leads", "profile"):
+        for always in ("admin.permissions", "profile"):
             if always not in pages:
                 pages.append(always)
         return pages

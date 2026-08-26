@@ -149,10 +149,6 @@ export function canAccessPage(role: AppRole, pageKey: string, allowedPages?: str
   if (role === "SuperAdmin") {
     return pageKey === "admin.organizations" || pageKey === "admin.packages" || pageKey === "profile";
   }
-  // Company Admin always needs leads + verification for desk ops
-  if (role === "Admin" && (pageKey === "leads" || pageKey === "verification" || pageKey === "admin.permissions" || pageKey === "profile")) {
-    return true;
-  }
   // Company Admin + field roles: Super Admin package / module entitlements via allowed_pages
   if (!allowedPages) return false;
   return allowedPages.includes(pageKey);
