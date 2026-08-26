@@ -84,10 +84,43 @@ export function AdminUsersPage() {
     [users],
   );
 
-  const managers = useMemo(
-    () => orgUsers.filter((u) => ["Admin", "Manager", "TL"].includes(u.role) && u.is_active_user !== false),
-    [orgUsers]
-  );
+  /** Who can appear in Reports To: hierarchy supervisors + anyone with a custom org role. */
+  const reportToCandidates = useMemo(() => {
+    const supervisorBases = new Set(["Admin", "Manager", "TL"]);
+    const rank = (u: CrmUser) => {
+      if (u.role === "Admin") return 0;
+      if (u.role === "Manager") return 1;
+      if (u.role === "TL") return 2;
+      return 3;
+    };
+    return orgUsers
+      .filter((u) => u.is_active_user !== false)
+      .filter((u) => {
+        if (supervisorBases.has(u.role)) return true;
+        if (!u.organization_role_id) return false;
+        const orgRole = orgRoles.find((r) => r.id === u.organization_role_id);
+        if (!orgRole) {
+          // Role name present from API — treat as assignable supervisor option
+          return Boolean(u.organization_role_name);
+        }
+        if (supervisorBases.has(orgRole.base_role)) return true;
+        // Custom roles (any base) so newly created role holders show for reporting
+        return !orgRole.is_system;
+      })
+      .sort((a, b) => {
+        const d = rank(a) - rank(b);
+        if (d !== 0) return d;
+        const an = `${a.first_name || ""} ${a.username}`.trim().toLowerCase();
+        const bn = `${b.first_name || ""} ${b.username}`.trim().toLowerCase();
+        return an.localeCompare(bn);
+      });
+  }, [orgUsers, orgRoles]);
+
+  const reportToLabel = (u: CrmUser) => {
+    const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || u.username;
+    const roleLabel = u.organization_role_name || u.role;
+    return `${name} (${roleLabel})`;
+  };
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -408,15 +441,18 @@ export function AdminUsersPage() {
             </Field>
             <Field label="Reports To">
               <select
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
                 value={createForm.reports_to ?? ""}
                 onChange={(e) => setCreateForm({ ...createForm, reports_to: e.target.value ? Number(e.target.value) : null })}
               >
                 <option value="">None</option>
-                {managers.map((m) => (
-                  <option key={m.id} value={m.id}>{m.first_name || m.username} ({m.role})</option>
+                {reportToCandidates.map((m) => (
+                  <option key={m.id} value={m.id}>{reportToLabel(m)}</option>
                 ))}
               </select>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Admins, Managers, TLs, and users with custom roles appear here.
+              </p>
             </Field>
           </div>
           <Field label="Assigned Projects">
@@ -506,15 +542,18 @@ export function AdminUsersPage() {
             </Field>
             <Field label="Reports To">
               <select
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
                 value={editForm.reports_to ?? ""}
                 onChange={(e) => setEditForm({ ...editForm, reports_to: e.target.value ? Number(e.target.value) : null })}
               >
                 <option value="">None</option>
-                {managers.filter((m) => m.id !== editing.id).map((m) => (
-                  <option key={m.id} value={m.id}>{m.first_name || m.username} ({m.role})</option>
+                {reportToCandidates.filter((m) => m.id !== editing.id).map((m) => (
+                  <option key={m.id} value={m.id}>{reportToLabel(m)}</option>
                 ))}
               </select>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Admins, Managers, TLs, and users with custom roles appear here.
+              </p>
             </Field>
             <Field label="New Password (optional)">
               <Input
