@@ -32,6 +32,8 @@ export function AdminRolesPage() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["org-roles"],
     queryFn: () => api.orgRoles(),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [mode, setMode] = useState<"view" | "create" | "edit">("view");
@@ -73,10 +75,28 @@ export function AdminRolesPage() {
     }
   }, [selected, mode]);
 
+  const patchRolesCache = (updater: (results: OrgRole[]) => OrgRole[]) => {
+    qc.setQueryData(["org-roles"], (old: unknown) => {
+      const base =
+        old && typeof old === "object"
+          ? (old as {
+              results?: OrgRole[];
+              page_catalog?: OrgRolePage[];
+              base_roles?: { value: string; label: string }[];
+            })
+          : {};
+      return {
+        results: updater(Array.isArray(base.results) ? base.results : []),
+        page_catalog: base.page_catalog || data?.page_catalog || [],
+        base_roles: base.base_roles || data?.base_roles || [],
+      };
+    });
+  };
+
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ["org-roles"] });
-    qc.invalidateQueries({ queryKey: ["me"] });
-    qc.invalidateQueries({ queryKey: ["users"] });
+    void qc.invalidateQueries({ queryKey: ["org-roles"] });
+    void qc.invalidateQueries({ queryKey: ["me"] });
+    void qc.invalidateQueries({ queryKey: ["users"] });
   };
 
   const create = useMutation({
@@ -88,6 +108,7 @@ export function AdminRolesPage() {
         pages: draft!.pages.map((p) => ({ page_key: p.page_key, enabled: p.locked ? true : !!p.enabled })),
       }),
     onSuccess: (role) => {
+      patchRolesCache((results) => [...results.filter((r) => r.id !== role.id), role]);
       invalidate();
       setSelectedId(role.id);
       setMode("view");
@@ -107,7 +128,8 @@ export function AdminRolesPage() {
         is_active: draft!.is_active,
         pages: draft!.pages.map((p) => ({ page_key: p.page_key, enabled: p.locked ? true : !!p.enabled })),
       }),
-    onSuccess: () => {
+    onSuccess: (role) => {
+      patchRolesCache((results) => results.map((r) => (r.id === role.id ? role : r)));
       invalidate();
       setMode("view");
       setFlash("Role updated");
@@ -119,7 +141,8 @@ export function AdminRolesPage() {
 
   const remove = useMutation({
     mutationFn: (id: number) => api.deleteOrgRole(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      patchRolesCache((results) => results.filter((r) => r.id !== id));
       invalidate();
       setSelectedId(null);
       setMode("view");

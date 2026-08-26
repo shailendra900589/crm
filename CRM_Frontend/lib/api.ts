@@ -410,12 +410,22 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ permissions }),
     }),
-  orgRoles: () =>
-    request<{
-      results: OrgRole[];
-      page_catalog: { page_key: string; label: string; href: string; description?: string; locked?: boolean }[];
-      base_roles: { value: string; label: string }[];
-    }>("/api/admin/roles/"),
+  orgRoles: async () => {
+    const raw = await request<Record<string, unknown> | OrgRole[]>("/api/admin/roles/");
+    if (Array.isArray(raw)) {
+      return { results: raw as OrgRole[], page_catalog: [], base_roles: [] };
+    }
+    const results = Array.isArray(raw?.results)
+      ? (raw.results as OrgRole[])
+      : Array.isArray((raw as { data?: OrgRole[] })?.data)
+        ? ((raw as { data: OrgRole[] }).data)
+        : [];
+    return {
+      results,
+      page_catalog: (raw?.page_catalog as OrgRolePage[] | undefined) || [],
+      base_roles: (raw?.base_roles as { value: string; label: string }[] | undefined) || [],
+    };
+  },
   createOrgRole: (data: {
     name: string;
     description?: string;

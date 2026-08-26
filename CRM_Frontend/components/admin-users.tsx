@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge, Button, Card, Input } from "@/components/ui";
-import { api, type CreateUserData, type CrmUser, type UpdateUserData } from "@/lib/api";
+import { api, type CreateUserData, type CrmUser, type OrgRole, type UpdateUserData } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Search, Shield, UserCog, UserPlus, Users } from "lucide-react";
@@ -22,6 +22,31 @@ const emptyCreate = (): CreateUserData => ({
   organization_role: null,
 });
 
+/** Match a base hierarchy role to an org role id (system first, then any). */
+function pickOrgRole(roles: OrgRole[], preferredBase = "BDM"): OrgRole | null {
+  if (!roles.length) return null;
+  return (
+    roles.find((r) => r.is_system && r.base_role === preferredBase) ||
+    roles.find((r) => r.base_role === preferredBase) ||
+    roles.find((r) => r.is_system && r.base_role === "BDM") ||
+    roles[0] ||
+    null
+  );
+}
+
+function roleSelectValue(
+  role: string | undefined,
+  organizationRoleId: number | null | undefined,
+  roles: OrgRole[],
+): string {
+  if (role === "Admin") return "Admin";
+  if (organizationRoleId != null && roles.some((r) => r.id === organizationRoleId)) {
+    return `role:${organizationRoleId}`;
+  }
+  const match = pickOrgRole(roles, role || "BDM");
+  if (match) return `role:${match.id}`;
+  return `base:${role || "BDM"}`;
+}
 export function AdminUsersPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
@@ -37,11 +62,21 @@ export function AdminUsersPage() {
     queryFn: () => api.users({ all: true }),
   });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects });
-  const { data: rolesPayload } = useQuery({ queryKey: ["org-roles"], queryFn: () => api.orgRoles() });
-  const orgRoles = useMemo(
-    () => (rolesPayload?.results || []).filter((r) => r.is_active !== false),
-    [rolesPayload],
-  );
+  const {
+    data: rolesPayload,
+    refetch: refetchRoles,
+    isFetching: rolesFetching,
+    isError: rolesError,
+  } = useQuery({
+    queryKey: ["org-roles"],
+    queryFn: () => api.orgRoles(),
+    staleTime: 0,
+    refetchOnMount: "always",
+  });
+  const orgRoles = useMemo(() => {
+    const list = rolesPayload?.results || [];
+    return list.filter((r) => r && r.is_active !== false);
+  }, [rolesPayload]);
 
   // Super Admin must never appear in company Users UI
   const orgUsers = useMemo(
@@ -114,12 +149,37 @@ export function AdminUsersPage() {
   });
 
   const openCreate = () => {
-    setCreateForm(emptyCreate());
+    const match = pickOrgRole(orgRoles, "BDM");
+    setCreateForm({
+      ...emptyCreate(),
+      organization_role: match?.id ?? null,
+      role: (match?.base_role as CrmUser["role"]) || "BDM",
+    });
     setError("");
     setModal("create");
+    void refetchRoles().then((res) => {
+      const list = (res.data?.results || []).filter((r) => r && r.is_active !== false);
+      const next = pickOrgRole(list, "BDM");
+      if (!next) return;
+      setCreateForm((prev) => {
+        if (prev.role === "Admin") return prev;
+        if (prev.organization_role != null && list.some((r) => r.id === prev.organization_role)) {
+          return prev;
+        }
+        return {
+          ...prev,
+          organization_role: next.id,
+          role: (next.base_role as CrmUser["role"]) || prev.role,
+        };
+      });
+    });
   };
 
   const openEdit = (u: CrmUser) => {
+    let orgRoleId = u.organization_role_id ?? null;
+    if (orgRoleId == null && u.role !== "Admin") {
+      orgRoleId = pickOrgRole(orgRoles, u.role)?.id ?? null;
+    }
     setEditing(u);
     setEditForm({
       first_name: u.first_name || "",
@@ -130,11 +190,12 @@ export function AdminUsersPage() {
       reports_to: u.reports_to ?? null,
       assigned_projects: u.assigned_project_ids || [],
       is_active_user: u.is_active_user !== false,
-      organization_role: u.organization_role_id ?? null,
+      organization_role: orgRoleId,
       password: "",
     });
     setError("");
     setModal("edit");
+    void refetchRoles();
   };
 
   const projectName = (id: number) => projects.find((p) => p.id === id)?.name || `#${id}`;
@@ -290,14 +351,8 @@ export function AdminUsersPage() {
             </Field>
             <Field label="Role">
               <select
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                value={
-                  createForm.organization_role
-                    ? `role:${createForm.organization_role}`
-                    : createForm.role === "Admin"
-                      ? "Admin"
-                      : `base:${createForm.role}`
-                }
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+                value={roleSelectValue(createForm.role, createForm.organization_role, orgRoles)}
                 onChange={(e) => {
                   const v = e.target.value;
                   if (v === "Admin") {
@@ -315,11 +370,11 @@ export function AdminUsersPage() {
                     return;
                   }
                   const base = v.replace("base:", "") as CrmUser["role"];
-                  const sys = orgRoles.find((x) => x.is_system && x.base_role === base);
+                  const match = pickOrgRole(orgRoles, base);
                   setCreateForm({
                     ...createForm,
                     role: base,
-                    organization_role: sys?.id ?? null,
+                    organization_role: match?.id ?? null,
                   });
                 }}
               >
@@ -336,9 +391,20 @@ export function AdminUsersPage() {
                     </option>
                   ))}
               </select>
-              <p className="mt-1 text-[11px] text-slate-400">
-                Create custom roles under Admin → Roles, then assign them here.
-              </p>
+              {rolesError ? (
+                <p className="mt-1 text-[11px] text-rose-400">
+                  Could not load roles.{" "}
+                  <button type="button" className="underline" onClick={() => void refetchRoles()}>
+                    Retry
+                  </button>
+                </p>
+              ) : rolesFetching && !orgRoles.length ? (
+                <p className="mt-1 text-[11px] text-slate-400">Loading roles…</p>
+              ) : (
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Create custom roles under Admin → Roles — they appear here automatically.
+                </p>
+              )}
             </Field>
             <Field label="Reports To">
               <select
@@ -386,13 +452,11 @@ export function AdminUsersPage() {
             </Field>
             <Field label="Role">
               <select
-                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
+                className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-900"
                 value={
                   editing?.role === "Admin"
                     ? "Admin"
-                    : editForm.organization_role
-                      ? `role:${editForm.organization_role}`
-                      : `base:${editForm.role || editing?.role || "BDM"}`
+                    : roleSelectValue(editForm.role || editing?.role, editForm.organization_role, orgRoles)
                 }
                 disabled={editing?.role === "Admin"}
                 onChange={(e) => {
@@ -412,11 +476,11 @@ export function AdminUsersPage() {
                     return;
                   }
                   const base = v.replace("base:", "") as CrmUser["role"];
-                  const sys = orgRoles.find((x) => x.is_system && x.base_role === base);
+                  const match = pickOrgRole(orgRoles, base);
                   setEditForm({
                     ...editForm,
                     role: base,
-                    organization_role: sys?.id ?? null,
+                    organization_role: match?.id ?? null,
                   });
                 }}
               >
@@ -429,6 +493,13 @@ export function AdminUsersPage() {
               </select>
               {editing?.role === "Admin" ? (
                 <p className="mt-1 text-[11px] text-slate-400">Admin role can only be changed by Super Admin.</p>
+              ) : rolesError ? (
+                <p className="mt-1 text-[11px] text-rose-400">
+                  Could not load roles.{" "}
+                  <button type="button" className="underline" onClick={() => void refetchRoles()}>
+                    Retry
+                  </button>
+                </p>
               ) : (
                 <p className="mt-1 text-[11px] text-slate-400">Custom roles are managed under Admin → Roles.</p>
               )}

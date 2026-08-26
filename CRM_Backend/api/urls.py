@@ -52,7 +52,7 @@ router.register("sales-targets", SalesTargetViewSet)
 router.register("organizations", OrganizationViewSet)
 router.register("packages", SubscriptionPackageViewSet, basename="packages")
 router.register("verification-works", VerificationWorkViewSet, basename="verification-works")
-router.register("admin/roles", OrganizationRoleViewSet, basename="admin-roles")
+router.register("roles", OrganizationRoleViewSet, basename="org-roles")
 
 urlpatterns = [
     path("health/", HealthView.as_view()),
@@ -73,6 +73,19 @@ urlpatterns = [
     path("admin/managers/", AdminManagersView.as_view()),
     path("admin/managers/<int:manager_id>/dashboard/", ManagerDrilldownView.as_view()),
     path("admin/page-permissions/", AdminPagePermissionsView.as_view()),
+    # Explicit admin roles routes (create/list/update for Users dropdown sync)
+    path(
+        "admin/roles/",
+        OrganizationRoleViewSet.as_view({"get": "list", "post": "create"}),
+    ),
+    path(
+        "admin/roles/<int:pk>/",
+        OrganizationRoleViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
+    ),
+    path(
+        "admin/roles/<int:pk>/permissions/",
+        OrganizationRoleViewSet.as_view({"put": "permissions"}),
+    ),
     path("public/register-organization/", RegisterOrganizationView.as_view()),
     path("bulk-jobs/<int:job_id>/", BulkJobView.as_view()),
     path("", include(router.urls)),
