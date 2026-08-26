@@ -208,7 +208,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     admin: "Org Dashboard",
     organizations: "Platform",
     forms: "Form Builder",
-    permissions: "Permissions",
+    permissions: "Roles",
     projects: isProjectDetail ? "Project Details" : "Projects",
     users: "Users",
     audit: "Audit Log",

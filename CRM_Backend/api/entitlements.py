@@ -147,17 +147,20 @@ def ensure_org_entitlements(org):
         return None
     changed = False
     modules = sanitize_modules(org.enabled_modules or [])
-    if not org.enabled_modules or modules != list(org.enabled_modules or []):
-        if not org.enabled_modules:
-            pkg = org.package or get_default_package()
-            if pkg and not org.package_id:
-                org.package = pkg
-                changed = True
-            modules = sanitize_modules((pkg.module_keys if pkg else None) or default_common_modules())
+    if not org.enabled_modules:
+        pkg = org.package or get_default_package()
+        if pkg and not org.package_id:
+            org.package = pkg
+            changed = True
+        modules = sanitize_modules((pkg.module_keys if pkg else None) or default_common_modules())
+    # Company Admin must always manage Roles
+    if "admin.permissions" not in modules:
+        modules.append("admin.permissions")
+    if "profile" not in modules:
+        modules.append("profile")
+    modules = sanitize_modules(modules)
+    if modules != list(org.enabled_modules or []):
         org.enabled_modules = modules
-        changed = True
-    if "profile" not in org.enabled_modules:
-        org.enabled_modules = sanitize_modules(list(org.enabled_modules) + ["profile"])
         changed = True
     if changed:
         fields = ["enabled_modules"]

@@ -166,8 +166,13 @@ class MeView(APIView):
         org = getattr(request.user, "organization", None)
         if org is not None:
             ensure_org_entitlements(org)
-            # Refresh FK cache after ensure may save package/modules
             org.refresh_from_db()
+            try:
+                from .org_roles import ensure_org_roles
+
+                ensure_org_roles(org)
+            except Exception:
+                pass
 
         data = UserSerializer(request.user).data
         data["allowed_pages"] = allowed_pages_for_user(request.user)

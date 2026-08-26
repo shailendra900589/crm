@@ -48,7 +48,7 @@ export const ADMIN_NAV: NavEntry[] = [
   { pageKey: "admin.projects", href: "/admin/projects", icon: FolderKanban, labels: { default: "Projects" } },
   { pageKey: "admin.users", href: "/admin/users", icon: UserCog, labels: { default: "Users" } },
   { pageKey: "admin.forms", href: "/admin/forms", icon: FileText, labels: { default: "Form Builder" } },
-  { pageKey: "admin.permissions", href: "/admin/permissions", icon: KeyRound, labels: { default: "Permissions" } },
+  { pageKey: "admin.permissions", href: "/admin/permissions", icon: KeyRound, labels: { default: "Roles" } },
   { pageKey: "admin.audit", href: "/admin/audit", icon: ClipboardList, labels: { default: "Audit Log" } },
   { pageKey: "verification", href: "/verification", icon: ClipboardCheck, labels: { default: "Verification" } },
   { pageKey: "team", href: "/team", icon: Users, labels: { default: "Teams" } },

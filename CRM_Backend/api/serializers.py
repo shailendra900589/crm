@@ -68,6 +68,12 @@ class UserSerializer(serializers.ModelSerializer):
         source="assigned_projects", many=True, read_only=True
     )
     organization_name = serializers.CharField(source="organization.name", read_only=True, allow_null=True)
+    organization_role_id = serializers.PrimaryKeyRelatedField(
+        source="organization_role", read_only=True, allow_null=True
+    )
+    organization_role_name = serializers.CharField(
+        source="organization_role.name", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = User
@@ -76,6 +82,7 @@ class UserSerializer(serializers.ModelSerializer):
             "mobile_number", "reports_to", "reports_to_name", "is_active_user",
             "assigned_project_ids", "crm_pro_mobile_enabled",
             "organization", "organization_name", "hrms_user_id", "can_edit_leads",
+            "organization_role_id", "organization_role_name",
         ]
 
     def get_reports_to_name(self, obj):
@@ -89,13 +96,14 @@ class UserCreateSerializer(serializers.ModelSerializer):
     assigned_projects = serializers.PrimaryKeyRelatedField(
         queryset=Project.objects.all(), many=True, required=False
     )
+    organization_role = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = User
         fields = [
             "username", "password", "first_name", "last_name", "email", "role",
             "mobile_number", "reports_to", "assigned_projects", "organization",
-            "can_edit_leads", "hrms_user_id",
+            "can_edit_leads", "hrms_user_id", "organization_role",
         ]
 
     def validate_role(self, value):
@@ -107,14 +115,40 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        from .models import OrganizationRole
+        from .permissions import user_can_access_project
+
         projects = validated_data.pop("assigned_projects", [])
         password = validated_data.pop("password")
+        org_role_id = validated_data.pop("organization_role", None)
         actor = self.context["request"].user
-        validated_data.pop("organization", None)  # force org from actor
+        validated_data.pop("organization", None)
         if getattr(actor, "organization_id", None):
             validated_data["organization"] = actor.organization
-        # Only allow assigning projects inside the actor's organization
-        from .permissions import user_can_access_project
+
+        if org_role_id and actor.organization_id:
+            org_role = OrganizationRole.objects.filter(
+                id=org_role_id, organization_id=actor.organization_id, is_active=True
+            ).first()
+            if not org_role:
+                raise serializers.ValidationError({"organization_role": "Invalid role for this company."})
+            if validated_data.get("role") != User.Role.ADMIN:
+                validated_data["role"] = org_role.base_role
+            validated_data["organization_role"] = org_role
+        elif validated_data.get("role") in (
+            User.Role.MANAGER,
+            User.Role.TL,
+            User.Role.BDM,
+            User.Role.OPS,
+        ) and actor.organization_id:
+            org_role = OrganizationRole.objects.filter(
+                organization_id=actor.organization_id,
+                base_role=validated_data["role"],
+                is_system=True,
+                is_active=True,
+            ).first()
+            if org_role:
+                validated_data["organization_role"] = org_role
 
         safe_projects = [p for p in projects if user_can_access_project(actor, p.id)]
         user = User(**validated_data)
@@ -130,6 +164,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     assigned_projects = serializers.PrimaryKeyRelatedField(
         queryset=Project.objects.all(), many=True, required=False
     )
+    organization_role = serializers.IntegerField(required=False, allow_null=True)
 
     class Meta:
         model = User
@@ -137,6 +172,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             "first_name", "last_name", "email", "role", "mobile_number",
             "reports_to", "is_active_user", "password", "assigned_projects",
             "crm_pro_mobile_enabled", "organization", "can_edit_leads", "hrms_user_id",
+            "organization_role",
         ]
 
     def validate_role(self, value):
@@ -170,16 +206,35 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance, validated_data):
+        from .models import OrganizationRole
+        from .permissions import user_can_access_project
+
         if instance.role == User.Role.SUPERADMIN:
             raise serializers.ValidationError("Super Admin accounts cannot be edited here.")
         password = validated_data.pop("password", None)
         projects = validated_data.pop("assigned_projects", None)
-        validated_data.pop("organization", None)  # keep org locked to company
+        org_role_id = validated_data.pop("organization_role", serializers.empty)
+        validated_data.pop("organization", None)
         actor = self.context["request"].user
-        # Hard lock: non–Super Admin cannot deactivate / demote Admin
         if instance.role == User.Role.ADMIN and getattr(actor, "role", None) != User.Role.SUPERADMIN:
             validated_data.pop("is_active_user", None)
             validated_data["role"] = User.Role.ADMIN
+
+        if org_role_id is not serializers.empty and actor.organization_id:
+            if org_role_id is None:
+                validated_data["organization_role"] = None
+            else:
+                org_role = OrganizationRole.objects.filter(
+                    id=org_role_id, organization_id=actor.organization_id, is_active=True
+                ).first()
+                if not org_role:
+                    raise serializers.ValidationError(
+                        {"organization_role": "Invalid role for this company."}
+                    )
+                validated_data["organization_role"] = org_role
+                if instance.role != User.Role.ADMIN and validated_data.get("role", instance.role) != User.Role.ADMIN:
+                    validated_data["role"] = org_role.base_role
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:
@@ -188,9 +243,6 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             instance.is_active = bool(instance.is_active_user)
         instance.save()
         if projects is not None:
-            from .permissions import user_can_access_project
-
-            actor = self.context["request"].user
             safe_projects = [p for p in projects if user_can_access_project(actor, p.id)]
             instance.assigned_projects.set(safe_projects)
         return instance

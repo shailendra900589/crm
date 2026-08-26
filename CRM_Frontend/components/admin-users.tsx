@@ -19,6 +19,7 @@ const emptyCreate = (): CreateUserData => ({
   mobile_number: "",
   reports_to: null,
   assigned_projects: [],
+  organization_role: null,
 });
 
 export function AdminUsersPage() {
@@ -36,6 +37,11 @@ export function AdminUsersPage() {
     queryFn: () => api.users({ all: true }),
   });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: api.projects });
+  const { data: rolesPayload } = useQuery({ queryKey: ["org-roles"], queryFn: () => api.orgRoles() });
+  const orgRoles = useMemo(
+    () => (rolesPayload?.results || []).filter((r) => r.is_active !== false),
+    [rolesPayload],
+  );
 
   // Super Admin must never appear in company Users UI
   const orgUsers = useMemo(
@@ -124,6 +130,7 @@ export function AdminUsersPage() {
       reports_to: u.reports_to ?? null,
       assigned_projects: u.assigned_project_ids || [],
       is_active_user: u.is_active_user !== false,
+      organization_role: u.organization_role_id ?? null,
       password: "",
     });
     setError("");
@@ -207,6 +214,9 @@ export function AdminUsersPage() {
                 </td>
                 <td className="px-5 py-3">
                   <RoleBadge role={u.role} />
+                  {u.organization_role_name && u.organization_role_name !== u.role && (
+                    <p className="mt-0.5 text-[10px] text-slate-400">{u.organization_role_name}</p>
+                  )}
                 </td>
                 <td className="px-5 py-3 text-slate-600">{u.reports_to_name || "—"}</td>
                 <td className="px-5 py-3">
@@ -233,7 +243,7 @@ export function AdminUsersPage() {
                     <button type="button" onClick={() => openEdit(u)} className="rounded-lg p-1.5 hover:bg-slate-100">
                       <Pencil className="h-4 w-4 text-slate-500" />
                     </button>
-                    {u.is_active_user !== false && u.role !== "Admin" && (
+                    {u.is_active_user !== false && (
                       <button
                         type="button"
                         onClick={() => confirm(`Deactivate ${u.username}?`) && deactivate.mutate(u.id)}
@@ -241,11 +251,6 @@ export function AdminUsersPage() {
                       >
                         Deactivate
                       </button>
-                    )}
-                    {u.role === "Admin" && (
-                      <span className="px-1 text-[10px] text-slate-400" title="Only Super Admin can deactivate Admin">
-                        Protected
-                      </span>
                     )}
                   </div>
                 </td>
@@ -286,11 +291,54 @@ export function AdminUsersPage() {
             <Field label="Role">
               <select
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
-                value={createForm.role}
-                onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as CrmUser["role"] })}
+                value={
+                  createForm.organization_role
+                    ? `role:${createForm.organization_role}`
+                    : createForm.role === "Admin"
+                      ? "Admin"
+                      : `base:${createForm.role}`
+                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "Admin") {
+                    setCreateForm({ ...createForm, role: "Admin", organization_role: null });
+                    return;
+                  }
+                  if (v.startsWith("role:")) {
+                    const id = Number(v.slice(5));
+                    const r = orgRoles.find((x) => x.id === id);
+                    setCreateForm({
+                      ...createForm,
+                      organization_role: id,
+                      role: (r?.base_role as CrmUser["role"]) || "BDM",
+                    });
+                    return;
+                  }
+                  const base = v.replace("base:", "") as CrmUser["role"];
+                  const sys = orgRoles.find((x) => x.is_system && x.base_role === base);
+                  setCreateForm({
+                    ...createForm,
+                    role: base,
+                    organization_role: sys?.id ?? null,
+                  });
+                }}
               >
-                {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                <option value="Admin">Admin</option>
+                {orgRoles.map((r) => (
+                  <option key={r.id} value={`role:${r.id}`}>
+                    {r.name} ({r.base_role}){r.is_system ? "" : " · custom"}
+                  </option>
+                ))}
+                {!orgRoles.length &&
+                  ROLES.filter((r) => r !== "Admin").map((r) => (
+                    <option key={r} value={`base:${r}`}>
+                      {r}
+                    </option>
+                  ))}
               </select>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Create custom roles under Admin → Roles, then assign them here.
+              </p>
             </Field>
             <Field label="Reports To">
               <select
@@ -339,14 +387,50 @@ export function AdminUsersPage() {
             <Field label="Role">
               <select
                 className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-500"
-                value={editForm.role}
+                value={
+                  editing?.role === "Admin"
+                    ? "Admin"
+                    : editForm.organization_role
+                      ? `role:${editForm.organization_role}`
+                      : `base:${editForm.role || editing?.role || "BDM"}`
+                }
                 disabled={editing?.role === "Admin"}
-                onChange={(e) => setEditForm({ ...editForm, role: e.target.value as CrmUser["role"] })}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === "Admin") {
+                    setEditForm({ ...editForm, role: "Admin", organization_role: null });
+                    return;
+                  }
+                  if (v.startsWith("role:")) {
+                    const id = Number(v.slice(5));
+                    const r = orgRoles.find((x) => x.id === id);
+                    setEditForm({
+                      ...editForm,
+                      organization_role: id,
+                      role: (r?.base_role as CrmUser["role"]) || "BDM",
+                    });
+                    return;
+                  }
+                  const base = v.replace("base:", "") as CrmUser["role"];
+                  const sys = orgRoles.find((x) => x.is_system && x.base_role === base);
+                  setEditForm({
+                    ...editForm,
+                    role: base,
+                    organization_role: sys?.id ?? null,
+                  });
+                }}
               >
-                {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                <option value="Admin">Admin</option>
+                {orgRoles.map((r) => (
+                  <option key={r.id} value={`role:${r.id}`}>
+                    {r.name} ({r.base_role}){r.is_system ? "" : " · custom"}
+                  </option>
+                ))}
               </select>
-              {editing?.role === "Admin" && (
+              {editing?.role === "Admin" ? (
                 <p className="mt-1 text-[11px] text-slate-400">Admin role can only be changed by Super Admin.</p>
+              ) : (
+                <p className="mt-1 text-[11px] text-slate-400">Custom roles are managed under Admin → Roles.</p>
               )}
             </Field>
             <Field label="Reports To">

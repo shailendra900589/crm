@@ -410,6 +410,29 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ permissions }),
     }),
+  orgRoles: () =>
+    request<{
+      results: OrgRole[];
+      page_catalog: { page_key: string; label: string; href: string; description?: string; locked?: boolean }[];
+      base_roles: { value: string; label: string }[];
+    }>("/api/admin/roles/"),
+  createOrgRole: (data: {
+    name: string;
+    description?: string;
+    base_role: string;
+    pages?: { page_key: string; enabled: boolean }[];
+  }) => request<OrgRole>("/api/admin/roles/", { method: "POST", body: JSON.stringify(data) }),
+  updateOrgRole: (
+    id: number,
+    data: {
+      name?: string;
+      description?: string;
+      base_role?: string;
+      is_active?: boolean;
+      pages?: { page_key: string; enabled: boolean }[];
+    },
+  ) => request<OrgRole>(`/api/admin/roles/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteOrgRole: (id: number) => request<void>(`/api/admin/roles/${id}/`, { method: "DELETE" }),
 
   teams: () => requestList<Team>(`/api/teams/${buildQuery()}`),
   createTeam: (data: Partial<Team> & { members?: number[] }) =>
@@ -863,6 +886,27 @@ export type CrmUser = User & {
   allowed_pages?: string[];
   crm_pro_mobile_access?: boolean;
   crm_pro_mobile_reason?: string | null;
+  organization_role_id?: number | null;
+  organization_role_name?: string | null;
+};
+export type OrgRolePage = {
+  page_key: string;
+  label: string;
+  href: string;
+  description?: string;
+  locked?: boolean;
+  enabled: boolean;
+};
+export type OrgRole = {
+  id: number;
+  name: string;
+  slug: string;
+  description?: string;
+  base_role: string;
+  is_system: boolean;
+  is_active: boolean;
+  users_count?: number;
+  pages?: OrgRolePage[];
 };
 export type PagePermissionRow = {
   page_key: string;
@@ -883,10 +927,12 @@ export type CreateUserData = {
   mobile_number?: string;
   reports_to?: number | null;
   assigned_projects?: number[];
+  organization_role?: number | null;
 };
 export type UpdateUserData = Partial<Omit<CreateUserData, "username" | "password">> & {
   password?: string;
   is_active_user?: boolean;
+  organization_role?: number | null;
 };
 export type TeamReport = { team: Team; total_leads: number; confirmed: number; conversion: number; leaderboard: { bdm__first_name: string; bdm__username: string; total: number; confirmed: number }[] };
 export type ManagerSummary = { id: number; name: string; role: string; lead_count: number; confirmed: number; follow_ups_today: number };

@@ -230,6 +230,14 @@ class User(AbstractUser):
         help_text="Override CRM Pro mobile access. Null = inherit from assigned projects.",
     )
     assigned_projects = models.ManyToManyField(Project, related_name="assigned_users", blank=True)
+    organization_role = models.ForeignKey(
+        "OrganizationRole",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="users",
+        help_text="Custom / org role for page permissions. Hierarchy still uses User.role (base capability).",
+    )
 
 
 class Team(models.Model):
@@ -492,7 +500,7 @@ class SalesTarget(models.Model):
 
 
 class RolePagePermission(models.Model):
-    """Admin-controlled page access for Manager / TL / BDM / Ops."""
+    """Legacy global page access for Manager / TL / BDM / Ops (seed template)."""
 
     role = models.CharField(max_length=20, choices=User.Role.choices, db_index=True)
     page_key = models.CharField(max_length=64, db_index=True)
@@ -506,6 +514,46 @@ class RolePagePermission(models.Model):
     def __str__(self):
         state = "on" if self.enabled else "off"
         return f"{self.role} · {self.page_key} · {state}"
+
+
+class OrganizationRole(models.Model):
+    """Per-company role (system Manager/TL/BDM/Ops + custom roles Admin can create)."""
+
+    class BaseRole(models.TextChoices):
+        MANAGER = "Manager", "Manager"
+        TL = "TL", "Team Lead"
+        BDM = "BDM", "BDM"
+        OPS = "Ops", "Office Ops"
+
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="roles")
+    name = models.CharField(max_length=80)
+    slug = models.SlugField(max_length=80)
+    description = models.CharField(max_length=255, blank=True, default="")
+    base_role = models.CharField(max_length=20, choices=BaseRole.choices, default=BaseRole.BDM)
+    is_system = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-is_system", "name"]
+        unique_together = [("organization", "slug")]
+
+    def __str__(self):
+        return f"{self.organization_id} · {self.name}"
+
+
+class OrganizationRolePagePermission(models.Model):
+    role = models.ForeignKey(OrganizationRole, on_delete=models.CASCADE, related_name="page_permissions")
+    page_key = models.CharField(max_length=64, db_index=True)
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["page_key"]
+        unique_together = [("role", "page_key")]
+
+    def __str__(self):
+        return f"{self.role_id} · {self.page_key} · {'on' if self.enabled else 'off'}"
 
 
 class PasswordResetOTP(models.Model):

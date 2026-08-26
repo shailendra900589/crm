@@ -37,6 +37,7 @@ from .workflow_views import (
     SubscriptionPackageViewSet,
     VerificationWorkViewSet,
 )
+from .org_role_views import OrganizationRoleViewSet
 
 router = DefaultRouter()
 router.register("projects", ProjectViewSet)
@@ -51,6 +52,7 @@ router.register("sales-targets", SalesTargetViewSet)
 router.register("organizations", OrganizationViewSet)
 router.register("packages", SubscriptionPackageViewSet, basename="packages")
 router.register("verification-works", VerificationWorkViewSet, basename="verification-works")
+router.register("admin/roles", OrganizationRoleViewSet, basename="admin-roles")
 
 urlpatterns = [
     path("health/", HealthView.as_view()),
