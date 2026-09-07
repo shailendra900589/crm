@@ -276,7 +276,34 @@ export function OrganizationsAdminView() {
   });
 
   const sync = useMutation({
-    mutationFn: () => api.syncHrmsEmployees(selected!.id, { hrms_token: hrmsToken, force: true }),
+    mutationFn: async () => {
+      const companyId = hrmsCompanyId.trim();
+      if (!companyId) throw new Error("Enter HRMS company id (e.g. COMP-S9072DCU)");
+      if (!hrmsToken.trim()) throw new Error("Paste HRMS JWT token");
+      // Persist connect flags first so org is linked even if employee list is empty
+      await api.setOrganizationPayment(selected!.id, {
+        hrms_connected: true,
+        hrms_company_id: companyId,
+        hrms_api_base_url: "https://hrms.trackbook.co",
+      });
+      return api.syncHrmsEmployees(selected!.id, {
+        hrms_token: hrmsToken.trim(),
+        hrms_company_id: companyId,
+        hrms_api_base_url: "https://hrms.trackbook.co",
+        force: true,
+      });
+    },
+    onSuccess: (data) => {
+      invalidate();
+      if (selected) {
+        setSelected({
+          ...selected,
+          hrms_connected: true,
+          hrms_company_id: hrmsCompanyId.trim() || selected.hrms_company_id,
+        });
+      }
+      return data;
+    },
   });
 
   const createOrg = useMutation({
@@ -887,7 +914,7 @@ export function OrganizationsAdminView() {
               <Button
                 className="w-full gap-2"
                 variant="outline"
-                disabled={!hrmsToken || sync.isPending}
+                disabled={!hrmsToken || !hrmsCompanyId.trim() || sync.isPending}
                 onClick={() => sync.mutate()}
               >
                 <Link2 className="h-4 w-4" />
@@ -895,10 +922,17 @@ export function OrganizationsAdminView() {
               </Button>
               {sync.isSuccess && (
                 <p className="text-xs text-emerald-600">
-                  Fetched {sync.data.fetched}: +{sync.data.created} created, {sync.data.updated} updated
+                  Connected. Fetched {sync.data.fetched}: +{sync.data.created} created, {sync.data.updated} updated
+                  {typeof sync.data.hierarchy_linked === "number"
+                    ? `, ${sync.data.hierarchy_linked} Reports To linked`
+                    : ""}
                 </p>
               )}
-              {sync.isError && <p className="text-xs text-rose-600">{(sync.error as Error).message}</p>}
+              {sync.isError && (
+                <p className="text-xs text-rose-600 whitespace-pre-wrap break-all">
+                  {(sync.error as Error).message || "Request failed"}
+                </p>
+              )}
             </div>
 
             <Button variant="outline" className="mt-4 w-full" onClick={() => setSelected(null)}>

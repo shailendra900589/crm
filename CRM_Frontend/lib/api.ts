@@ -332,11 +332,24 @@ export const api = {
   updatePackage: (id: number, data: Partial<SubscriptionPackage>) =>
     request<SubscriptionPackage>(`/api/packages/${id}/`, { method: "PATCH", body: JSON.stringify(data) }),
   deletePackage: (id: number) => request<void>(`/api/packages/${id}/`, { method: "DELETE" }),
-  syncHrmsEmployees: (id: number, data: { hrms_token: string; force?: boolean }) =>
-    request<{ created: number; updated: number; fetched: number; errors: string[] }>(
-      `/api/organizations/${id}/sync-hrms-employees/`,
-      { method: "POST", body: JSON.stringify(data) },
-    ),
+  syncHrmsEmployees: (
+    id: number,
+    data: { hrms_token: string; force?: boolean; hrms_company_id?: string; hrms_api_base_url?: string },
+  ) =>
+    request<{
+      created: number;
+      updated: number;
+      fetched: number;
+      hierarchy_linked?: number;
+      errors: string[];
+      hrms_connected?: boolean;
+      hrms_company_id?: string;
+      source?: string;
+      detail?: string;
+    }>(`/api/organizations/${id}/sync-hrms-employees/`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 
   verificationWorks: (opts?: { status?: string; mine?: boolean; open?: boolean }) =>
     requestList<VerificationWork>(`/api/verification-works/${buildQuery({

@@ -235,6 +235,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         if is_company_admin(user) and user.organization_id and self.action in (
             "retrieve",
             "sync_hrms_employees",
+            "crm_hrms_employees",
             "partial_update",
             "update",
             "documents",
@@ -708,96 +709,203 @@ class SubscriptionPackageViewSet(viewsets.ModelViewSet):
     def sync_hrms_employees(self, request, pk=None):
         """
         Fetch employees from HRMS for this company and upsert as CRM users.
-        Requires: org.hrms_connected + hrms_company_id + hrms_token (or stored admin credentials in body).
+
+        Prefers Trackbook CRM-Pro integration endpoint:
+          GET /api/users/integrations/crm-pro/employees/?active_only=1&hrms_company_id=...
+        Falls back to legacy:
+          GET /api/users/company/employees/?active_only=1
         """
+        return self._sync_hrms_employees_impl(request, pk=pk)
+
+    @action(detail=True, methods=["get", "post"], url_path="crm-hrms-employees")
+    def crm_hrms_employees(self, request, pk=None):
+        """Alias used by some CRM builds / docs for the same HRMS sync."""
+        return self._sync_hrms_employees_impl(request, pk=pk)
+
+    def _sync_hrms_employees_impl(self, request, pk=None):
         user = request.user
         org = self.get_object()
         if not (is_superadmin(user) or (is_company_admin(user) and user.organization_id == org.id)):
             raise PermissionDenied("Not allowed.")
-        if not org.hrms_connected and not request.data.get("force"):
-            return Response(
-                {"detail": "Connect HRMS first (set hrms_connected + company id), or pass force=1."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
-        token = (request.data.get("hrms_token") or "").strip()
+        token = (request.data.get("hrms_token") or request.query_params.get("hrms_token") or "").strip()
+        company_id = (
+            request.data.get("hrms_company_id")
+            or request.query_params.get("hrms_company_id")
+            or org.hrms_company_id
+            or ""
+        )
+        company_id = str(company_id).strip()
+
+        if not org.hrms_connected and not request.data.get("force") and request.method == "POST":
+            if not company_id:
+                return Response(
+                    {"detail": "Connect HRMS first (set hrms_company_id), or pass force=1."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         base = (org.hrms_api_base_url or "https://hrms.trackbook.co").rstrip("/")
         if not token:
             return Response(
-                {"detail": "hrms_token required (HRMS JWT for a company admin)."},
+                {"detail": "hrms_token required (HRMS JWT for a company admin / allowed integration)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not company_id:
+            return Response(
+                {"detail": "hrms_company_id required (e.g. COMP-S9072DCU)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            res = requests.get(
-                f"{base}/api/users/company/employees/",
-                params={"active_only": "1"},
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=30,
-            )
-        except requests.RequestException as exc:
-            return Response({"detail": f"HRMS unreachable: {exc}"}, status=status.HTTP_502_BAD_GATEWAY)
+        # Persist connect flags before calling HRMS
+        org.hrms_company_id = company_id
+        org.hrms_connected = True
+        if "hrms_api_base_url" in request.data and request.data.get("hrms_api_base_url"):
+            org.hrms_api_base_url = str(request.data.get("hrms_api_base_url")).rstrip("/")
+            base = org.hrms_api_base_url
+        org.save(update_fields=["hrms_company_id", "hrms_connected", "hrms_api_base_url"])
 
-        if res.status_code >= 400:
+        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+        attempts = [
+            (
+                f"{base}/api/users/integrations/crm-pro/employees/",
+                {"active_only": "1", "hrms_company_id": company_id},
+            ),
+            (
+                f"{base}/api/users/company/employees/",
+                {"active_only": "1", "hrms_company_id": company_id},
+            ),
+            (
+                f"{base}/api/users/company/employees/",
+                {"active_only": "1"},
+            ),
+        ]
+
+        res = None
+        last_error = ""
+        used_url = ""
+        for url, params in attempts:
+            try:
+                res = requests.get(url, params=params, headers=headers, timeout=30)
+                used_url = res.url
+            except requests.RequestException as exc:
+                last_error = f"HRMS unreachable: {exc}"
+                res = None
+                continue
+            if res.status_code < 400:
+                break
+            body_preview = (res.text or "")[:400]
+            last_error = f"HRMS error {res.status_code} on {url}: {body_preview}"
+            # 404/405 → try next candidate; 401/403 usually auth — still try fallbacks once
+            if res.status_code in (401, 403) and "integrations/crm-pro" in url:
+                # same token may work on legacy path; continue
+                continue
+            if res.status_code >= 500:
+                continue
+
+        if res is None or res.status_code >= 400:
             return Response(
-                {"detail": f"HRMS error {res.status_code}", "body": res.text[:500]},
+                {"detail": last_error or "HRMS employee fetch failed."},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
-        payload = res.json()
-        rows = payload if isinstance(payload, list) else payload.get("results") or payload.get("employees") or []
+        try:
+            payload = res.json()
+        except Exception:
+            return Response(
+                {"detail": f"HRMS returned non-JSON body from {used_url}", "body": (res.text or "")[:400]},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        if isinstance(payload, list):
+            rows = payload
+        elif isinstance(payload, dict):
+            rows = (
+                payload.get("results")
+                or payload.get("employees")
+                or payload.get("data")
+                or payload.get("users")
+                or []
+            )
+            if isinstance(rows, dict):
+                rows = rows.get("results") or rows.get("employees") or []
+        else:
+            rows = []
+
+        if not isinstance(rows, list):
+            return Response(
+                {"detail": "Unexpected HRMS employees payload shape.", "body": str(payload)[:400]},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
         created = updated = 0
         errors = []
         role_map = {
+            "super_admin": User.Role.ADMIN,
+            "superadmin": User.Role.ADMIN,
+            "company_admin": User.Role.ADMIN,
             "admin": User.Role.ADMIN,
             "manager": User.Role.MANAGER,
             "tl": User.Role.TL,
+            "team_lead": User.Role.TL,
             "team lead": User.Role.TL,
+            "teamlead": User.Role.TL,
             "bdm": User.Role.BDM,
             "ops": User.Role.OPS,
             "office": User.Role.OPS,
             "employee": User.Role.OPS,
         }
+        # hrms_id -> crm user id for hierarchy pass
+        hrms_to_crm = {}
+        pending_reports = []  # (crm_user_id, manager_hrms_id)
 
         for row in rows:
+            if not isinstance(row, dict):
+                continue
             try:
-                hrms_id = str(row.get("id") or row.get("hrms_user_id") or "")
+                hrms_id = str(
+                    row.get("id")
+                    or row.get("hrms_user_id")
+                    or row.get("user_id")
+                    or ""
+                ).strip()
                 email = (row.get("email") or "").strip().lower()
-                username = (row.get("username") or email.split("@")[0] or f"hrms_{hrms_id}")[:50]
-                phone = (row.get("phone_number") or row.get("phone") or "")[:15]
+                username = (row.get("username") or (email.split("@")[0] if email else "") or f"hrms_{hrms_id or 'x'}")[:50]
+                phone = str(row.get("phone_number") or row.get("phone") or row.get("mobile") or "")[:15]
                 first = (row.get("first_name") or "")[:30]
                 last = (row.get("last_name") or "")[:30]
-                role_raw = str(row.get("role") or row.get("employee_type") or "Ops").lower()
+                role_raw = str(row.get("role") or row.get("employee_type") or row.get("designation") or "Ops").lower()
                 role = User.Role.OPS
                 for key, val in role_map.items():
-                    if key in role_raw:
+                    if key in role_raw.replace("-", "_") or key in role_raw:
                         role = val
                         break
                 if role == User.Role.ADMIN and not is_superadmin(user):
+                    # Company Admin syncing should not mass-create Admins unless Super Admin runs sync
                     role = User.Role.MANAGER
 
                 existing = None
                 if hrms_id:
                     existing = User.objects.filter(organization=org, hrms_user_id=hrms_id).first()
                 if not existing and email:
-                    existing = User.objects.filter(organization=org, email=email).first()
+                    existing = User.objects.filter(organization=org, email__iexact=email).first()
 
                 if existing:
                     existing.first_name = first or existing.first_name
                     existing.last_name = last or existing.last_name
                     existing.mobile_number = phone or existing.mobile_number
                     existing.hrms_user_id = hrms_id or existing.hrms_user_id
+                    # Keep role updates soft: only fill when still Ops default from older syncs? skip — don't clobber
                     existing.is_active_user = True
                     existing.save()
+                    crm_user = existing
                     updated += 1
                 else:
-                    # ensure unique username
                     base_u = username
                     n = 1
-                    while User.objects.filter(username=username).exists():
+                    while User.objects.filter(username__iexact=username).exists():
                         username = f"{base_u}{n}"[:50]
                         n += 1
-                    u = User(
+                    crm_user = User(
                         username=username,
                         email=email or f"{username}@crm.local",
                         first_name=first,
@@ -807,16 +915,49 @@ class SubscriptionPackageViewSet(viewsets.ModelViewSet):
                         mobile_number=phone,
                         hrms_user_id=hrms_id,
                         is_active_user=True,
+                        crm_pro_mobile_enabled=True,
                     )
-                    u.set_unusable_password()
-                    u.save()
+                    crm_user.set_unusable_password()
+                    crm_user.save()
                     created += 1
+
+                if hrms_id:
+                    hrms_to_crm[hrms_id] = crm_user.id
+                manager_hrms = str(
+                    row.get("reports_to_hrms_id")
+                    or row.get("manager_hrms_id")
+                    or row.get("manager_id")
+                    or row.get("reports_to")
+                    or ""
+                ).strip()
+                if manager_hrms and manager_hrms != hrms_id:
+                    pending_reports.append((crm_user.id, manager_hrms))
             except Exception as exc:  # noqa: BLE001
                 errors.append(str(exc))
 
-        org.hrms_connected = True
-        org.save(update_fields=["hrms_connected"])
-        return Response({"created": created, "updated": updated, "errors": errors[:20], "fetched": len(rows)})
+        linked = 0
+        for crm_uid, mgr_hrms in pending_reports:
+            mgr_crm_id = hrms_to_crm.get(str(mgr_hrms))
+            if not mgr_crm_id:
+                # manager_id might already be a CRM-side numeric username miss — try by hrms id only
+                continue
+            if mgr_crm_id == crm_uid:
+                continue
+            User.objects.filter(id=crm_uid, organization=org).update(reports_to_id=mgr_crm_id)
+            linked += 1
+
+        return Response(
+            {
+                "created": created,
+                "updated": updated,
+                "fetched": len(rows),
+                "hierarchy_linked": linked,
+                "errors": errors[:20],
+                "hrms_connected": True,
+                "hrms_company_id": company_id,
+                "source": used_url,
+            }
+        )
 
 
 class VerificationWorkViewSet(viewsets.ModelViewSet):
