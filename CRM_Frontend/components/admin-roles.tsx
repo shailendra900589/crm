@@ -177,7 +177,7 @@ export function AdminRolesPage() {
       return {
         ...prev,
         pages: prev.pages.map((p) =>
-          p.page_key === pageKey || p.locked ? p : { ...p, enabled: !p.enabled },
+          p.page_key === pageKey && !p.locked ? { ...p, enabled: !p.enabled } : p,
         ),
       };
     });
