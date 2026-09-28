@@ -42,6 +42,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "color",
             "is_active",
             "crm_pro_mobile_enabled",
+            "fresh_direct_enabled",
             "lead_count",
             "product_count",
             "created_at",
@@ -114,6 +115,23 @@ class UserCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Cannot create Admin users.")
         return value
 
+    def validate_username(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Username is required.")
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return value
+
+    def validate_email(self, value):
+        return (value or "").strip()
+
+    def validate_mobile_number(self, value):
+        value = (value or "").strip()
+        if len(value) > 15:
+            raise serializers.ValidationError("Mobile must be 15 characters or fewer.")
+        return value
+
     def create(self, validated_data):
         from .models import OrganizationRole
         from .permissions import user_can_access_project
@@ -150,10 +168,17 @@ class UserCreateSerializer(serializers.ModelSerializer):
             if org_role:
                 validated_data["organization_role"] = org_role
 
+        from django.db import IntegrityError
+
         safe_projects = [p for p in projects if user_can_access_project(actor, p.id)]
         user = User(**validated_data)
         user.set_password(password)
-        user.save()
+        try:
+            user.save()
+        except IntegrityError as exc:
+            raise serializers.ValidationError(
+                {"username": "Could not create user. Username may already exist."}
+            ) from exc
         if safe_projects:
             user.assigned_projects.set(safe_projects)
         return user
@@ -356,6 +381,7 @@ class LeadCreateSerializer(serializers.Serializer):
         allow_null=True,
     )
     force = serializers.BooleanField(required=False, default=False, write_only=True)
+    fresh_direct = serializers.BooleanField(required=False, default=False, write_only=True)
 
     def validate_project(self, project):
         from .permissions import user_can_access_project
@@ -370,10 +396,15 @@ class LeadCreateSerializer(serializers.Serializer):
         project = attrs.get("project")
         if product and project and product.project_id != project.id:
             raise serializers.ValidationError({"product": "Product must belong to the selected project."})
+        if attrs.get("fresh_direct") and project and not getattr(project, "fresh_direct_enabled", False):
+            raise serializers.ValidationError(
+                "Fresh Direct is turned off for this project. Open an existing lead instead."
+            )
         return attrs
 
     def create(self, validated_data):
         validated_data.pop("force", None)
+        validated_data.pop("fresh_direct", None)
         user = self.context["request"].user
         project = validated_data["project"]
         bdm = validated_data.pop("bdm", None) or user

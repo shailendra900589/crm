@@ -172,6 +172,10 @@ class Project(models.Model):
         default=False,
         help_text="When enabled, BDM/TL/Manager users on this project can open CRM Pro in Trackbook mobile.",
     )
+    fresh_direct_enabled = models.BooleanField(
+        default=False,
+        help_text="When enabled, the mobile app shows Fresh Direct (create a lead from the form). Off = form only for existing leads.",
+    )
     created_by = models.ForeignKey(
         "User", null=True, blank=True, on_delete=models.SET_NULL, related_name="created_projects"
     )

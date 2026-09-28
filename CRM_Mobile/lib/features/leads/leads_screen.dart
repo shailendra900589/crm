@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/lottie_box.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/form_provider.dart';
+import '../../providers/project_provider.dart';
 
 class LeadsScreen extends ConsumerWidget {
   const LeadsScreen({super.key});
@@ -15,6 +16,9 @@ class LeadsScreen extends ConsumerWidget {
     final leads = ref.watch(leadsProvider);
     final user = ref.watch(authProvider).user;
     final title = user?.isLeader == true ? 'Team Leads' : 'My Leads';
+    final activeId = ref.watch(activeProjectProvider);
+    final freshDirect = (ref.watch(projectsProvider).valueOrNull ?? const [])
+        .any((p) => p.id == activeId && p.freshDirectEnabled);
 
     return Scaffold(
       appBar: AppBar(
@@ -26,13 +30,15 @@ class LeadsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.coral,
-        foregroundColor: Colors.white,
-        onPressed: () => context.go('/form'),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Fresh Direct'),
-      ),
+      floatingActionButton: freshDirect
+          ? FloatingActionButton.extended(
+              backgroundColor: AppColors.coral,
+              foregroundColor: Colors.white,
+              onPressed: () => context.go('/form'),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Fresh Direct'),
+            )
+          : null,
       body: leads.when(
         data: (list) {
           if (list.isEmpty) {

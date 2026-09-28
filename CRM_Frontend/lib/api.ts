@@ -126,6 +126,48 @@ async function refreshToken(): Promise<boolean> {
   }
 }
 
+function formatApiError(err: unknown): string {
+  if (!err || typeof err !== "object") return "";
+  const parts: string[] = [];
+  const push = (value: unknown, key?: string) => {
+    if (value == null || value === "") return;
+    if (typeof value === "string") {
+      const label = key && key !== "detail" && key !== "message" && key !== "non_field_errors" ? `${key}: ` : "";
+      parts.push(`${label}${value}`);
+      return;
+    }
+    if (Array.isArray(value)) {
+      const text = value
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object" && "message" in item) return String((item as { message?: string }).message || "");
+          return "";
+        })
+        .filter(Boolean)
+        .join(", ");
+      if (!text) return;
+      const label = key && key !== "detail" && key !== "non_field_errors" ? `${key}: ` : "";
+      parts.push(`${label}${text}`);
+      return;
+    }
+    if (typeof value === "object") {
+      for (const [childKey, child] of Object.entries(value as Record<string, unknown>)) {
+        push(child, childKey);
+      }
+    }
+  };
+  const body = err as Record<string, unknown>;
+  if (body.detail != null) push(body.detail, "detail");
+  else {
+    for (const [key, value] of Object.entries(body)) {
+      if (key === "message") continue;
+      push(value, key);
+    }
+  }
+  if (!parts.length && typeof body.message === "string") parts.push(body.message);
+  return parts.join(" · ");
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -146,15 +188,7 @@ async function request<T>(
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    const detail = err.detail;
-    const msg = Array.isArray(detail)
-      ? detail.map((d: { message?: string } | string) => (typeof d === "string" ? d : d.message || "")).filter(Boolean).join(", ")
-      : typeof detail === "string"
-        ? detail
-        : detail && typeof detail === "object"
-          ? JSON.stringify(detail)
-          : err.message || "Request failed";
-    throw new Error(msg || "Request failed");
+    throw new Error(formatApiError(err) || "Request failed");
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -980,7 +1014,7 @@ export type RevisitLead = {
 
 export type Project = {
   id: number; name: string; slug: string; description: string; color: string;
-  is_active: boolean; crm_pro_mobile_enabled?: boolean; lead_count?: number; product_count?: number; created_at: string;
+  is_active: boolean; crm_pro_mobile_enabled?: boolean; fresh_direct_enabled?: boolean; lead_count?: number; product_count?: number; created_at: string;
 };
 export type ProductItem = {
   id: number; project: number; project_name: string; name: string; slug: string;

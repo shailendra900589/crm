@@ -79,6 +79,7 @@ export function AdminProjectDetailPage({ projectId }: { projectId: number }) {
         color: editing!.color,
         is_active: editing!.is_active,
         crm_pro_mobile_enabled: editing!.crm_pro_mobile_enabled ?? false,
+        fresh_direct_enabled: editing!.fresh_direct_enabled ?? false,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["project", projectId] });
@@ -131,6 +132,14 @@ export function AdminProjectDetailPage({ projectId }: { projectId: number }) {
   const toggleCrmProMobile = () => {
     if (!project) return;
     api.updateProject(project.id, { crm_pro_mobile_enabled: !project.crm_pro_mobile_enabled }).then(() => {
+      qc.invalidateQueries({ queryKey: ["project", projectId] });
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    });
+  };
+
+  const toggleFreshDirect = () => {
+    if (!project) return;
+    api.updateProject(project.id, { fresh_direct_enabled: !project.fresh_direct_enabled }).then(() => {
       qc.invalidateQueries({ queryKey: ["project", projectId] });
       qc.invalidateQueries({ queryKey: ["projects"] });
     });
@@ -195,6 +204,12 @@ export function AdminProjectDetailPage({ projectId }: { projectId: number }) {
                   <Badge
                     status={project.crm_pro_mobile_enabled ? "approved" : "rejected"}
                     label={project.crm_pro_mobile_enabled ? "CRM Pro mobile" : "CRM Pro off"}
+                  />
+                </button>
+                <button onClick={toggleFreshDirect}>
+                  <Badge
+                    status={project.fresh_direct_enabled ? "approved" : "rejected"}
+                    label={project.fresh_direct_enabled ? "Fresh Direct on" : "Fresh Direct off"}
                   />
                 </button>
                 <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium">
@@ -481,6 +496,14 @@ export function AdminProjectDetailPage({ projectId }: { projectId: number }) {
                   onChange={(e) => setEditing({ ...editing, crm_pro_mobile_enabled: e.target.checked })}
                 />
                 Allow CRM Pro in Trackbook mobile
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={editing.fresh_direct_enabled === true}
+                  onChange={(e) => setEditing({ ...editing, fresh_direct_enabled: e.target.checked })}
+                />
+                Show Fresh Direct on mobile (create lead from the form)
               </label>
             </div>
             <div className="mt-4 flex gap-2">

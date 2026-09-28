@@ -110,8 +110,11 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
     };
   }
 
-  Future<int> _ensureLead(ApiClient api) async {
+  Future<int> _ensureLead(ApiClient api, {required bool freshDirect}) async {
     if (_leadId != null) return _leadId!;
+    if (!freshDirect) {
+      throw Exception('Fresh Direct is off for this project. Open an existing lead to fill the form.');
+    }
     final projectId = ref.read(activeProjectProvider);
     if (projectId == null) throw Exception('Select a project first');
     final name = _freshName.text.trim();
@@ -155,6 +158,7 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
       'city': _freshCity.text.trim().isEmpty ? null : _freshCity.text.trim(),
       if (_productId != null) 'product': _productId,
       'notes': 'Fresh direct onboarding (mobile)',
+      'fresh_direct': true,
       if (force) 'force': true,
     });
     final id = (res.data as Map)['id'] as int;
@@ -190,7 +194,7 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
     setState(() => _error = null);
     try {
       final api = ref.read(apiClientProvider);
-      final leadId = await _ensureLead(api);
+      final leadId = await _ensureLead(api, freshDirect: _freshDirectOn());
       final form = FormData.fromMap({
         'field_id': field.fieldId,
         'file': await MultipartFile.fromFile(file.path, filename: file.name),
@@ -211,7 +215,7 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
     try {
       await ref.read(formSyncProvider.notifier).refresh(force: true);
       final api = ref.read(apiClientProvider);
-      final leadId = await _ensureLead(api);
+      final leadId = await _ensureLead(api, freshDirect: _freshDirectOn());
       await api.post('/api/leads/$leadId/form_submission/', data: {
         'answers': _answers,
         'remarks': '',
@@ -226,10 +230,17 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
     }
   }
 
+  bool _freshDirectOn() {
+    final projectId = ref.read(activeProjectProvider);
+    final projects = ref.read(projectsProvider).valueOrNull ?? const <ProjectItem>[];
+    return projects.any((p) => p.id == projectId && p.freshDirectEnabled);
+  }
+
   String apiError(Object e) => ref.read(apiClientProvider).errorMessage(e);
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(projectsProvider);
     final asyncForm = ref.watch(formSyncProvider);
 
     if (_success) {
@@ -288,6 +299,7 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
           final stepFields = steps[_step.clamp(0, steps.length - 1)]
               .where((f) => visible.contains(f.fieldId))
               .toList();
+          final freshDirect = _freshDirectOn();
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -300,7 +312,7 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
                 'Auto-synced from Form Builder${form.updatedAt.isNotEmpty ? ' · ${form.updatedAt.substring(0, 16)}' : ''}',
                 style: TextStyle(fontSize: 12, color: AppColors.ink.withValues(alpha: 0.5)),
               ),
-              if (_leadId == null) ...[
+              if (_leadId == null && freshDirect) ...[
                 const SizedBox(height: 14),
                 Card(
                   child: Padding(
@@ -335,13 +347,21 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
                     ),
                   ),
                 ),
-              ] else
+              ] else if (_leadId != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Chip(
                     avatar: const Icon(Icons.badge_outlined, size: 16),
                     label: Text('Lead #$_leadId'),
                     backgroundColor: AppColors.mist,
+                  ),
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Text(
+                    'Fresh Direct is off for this project. Open a lead, then fill this form.',
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
               if (steps.length > 1) ...[

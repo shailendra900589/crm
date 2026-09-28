@@ -62,6 +62,7 @@ class ProjectItem {
     this.color = '#0B3D4A',
     this.isActive = true,
     this.crmProMobileEnabled = false,
+    this.freshDirectEnabled = false,
   });
 
   final int id;
@@ -69,6 +70,7 @@ class ProjectItem {
   final String color;
   final bool isActive;
   final bool crmProMobileEnabled;
+  final bool freshDirectEnabled;
 
   factory ProjectItem.fromJson(Map<String, dynamic> j) => ProjectItem(
         id: j['id'] as int,
@@ -76,6 +78,7 @@ class ProjectItem {
         color: j['color'] as String? ?? '#0B3D4A',
         isActive: j['is_active'] as bool? ?? true,
         crmProMobileEnabled: j['crm_pro_mobile_enabled'] as bool? ?? false,
+        freshDirectEnabled: j['fresh_direct_enabled'] as bool? ?? false,
       );
 }
 
