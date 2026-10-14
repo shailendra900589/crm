@@ -33,7 +33,8 @@ export function VerificationQueueView() {
 
   const [selected, setSelected] = useState<VerificationWork | null>(null);
   const [assigneeId, setAssigneeId] = useState("");
-  const [notes, setNotes] = useState("");
+  const [assignNotes, setAssignNotes] = useState("");
+  const [decisionNotes, setDecisionNotes] = useState("");
   const [allowEdit, setAllowEdit] = useState(true);
 
   const canAssign = !!me && ["Admin", "SuperAdmin", "Manager", "TL"].includes(me.role);
@@ -43,7 +44,7 @@ export function VerificationQueueView() {
     mutationFn: () =>
       api.assignVerification(selected!.id, {
         assigned_to: Number(assigneeId),
-        assign_notes: notes,
+        assign_notes: assignNotes,
         allow_edit: allowEdit,
       }),
     onSuccess: () => {
@@ -51,57 +52,83 @@ export function VerificationQueueView() {
       qc.invalidateQueries({ queryKey: ["verification-summary"] });
       setSelected(null);
       setAssigneeId("");
-      setNotes("");
+      setAssignNotes("");
     },
   });
 
   const act = useMutation({
     mutationFn: async ({ id, action }: { id: number; action: "start" | "complete" | "reject" | "reopen" }) => {
       if (action === "start") return api.startVerification(id);
-      if (action === "complete") return api.completeVerification(id, { completion_notes: notes, approve_documents: true });
-      if (action === "reject") return api.rejectVerification(id, { completion_notes: notes });
+      if (action === "complete") return api.completeVerification(id, { completion_notes: decisionNotes, approve_documents: true });
+      if (action === "reject") return api.rejectVerification(id, { completion_notes: decisionNotes });
       return api.reopenVerification(id);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["verification-works"] });
       qc.invalidateQueries({ queryKey: ["verification-summary"] });
       setSelected(null);
-      setNotes("");
+      setDecisionNotes("");
     },
   });
 
+  const canDecide = (w: VerificationWork) => {
+    if (w.status === "done" || w.status === "rejected") return false;
+    if (canAssign) return true;
+    return w.assigned_to === me?.id && ["assigned", "in_progress", "reopened"].includes(w.status);
+  };
+
+  const openReview = (w: VerificationWork) => {
+    setSelected(w);
+    setAssigneeId("");
+    setAssignNotes("");
+    setDecisionNotes("");
+    setAllowEdit(true);
+  };
+
   const assigneeOptions = [...(assignees?.ops || []), ...(assignees?.team || [])];
 
+  const previewRows = (w: VerificationWork) => {
+    if ((w.form_schema || []).length > 0) {
+      return w.form_schema!.map((f) => {
+        const raw = w.answers?.[f.field_id];
+        const preview = (w.answer_preview || []).find((a) => a.field_id === f.field_id);
+        const val =
+          preview?.value ??
+          (raw == null || raw === "" ? "—" : typeof raw === "string" ? raw : JSON.stringify(raw));
+        return { key: f.field_id, label: f.label, value: val };
+      });
+    }
+    return (w.answer_preview || []).map((a) => ({ key: a.field_id, label: a.label, value: a.value }));
+  };
+
   return (
-    <div className="mx-auto max-w-[1100px] space-y-4">
-      <div className="rounded-xl border border-slate-200 bg-gradient-to-br from-slate-900 via-slate-800 to-blue-950 p-4 text-white shadow-lg dark:border-slate-700 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="mx-auto max-w-[1080px] space-y-5">
+      <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-100 px-5 py-5 dark:border-slate-800 sm:px-6">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-200/80">Workflow</p>
-            <h1 className="mt-1 text-xl font-bold sm:text-2xl">Verification desk</h1>
-            <p className="mt-1 max-w-xl text-xs text-slate-300 sm:text-sm">
-              BDM submits docs → Manager/TL assigns Ops → Ops completes → status on dashboard.
-            </p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Verification</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Desk</h1>
+            <p className="mt-1 text-sm text-slate-500">Review a submission, approve it, or assign it to Ops.</p>
           </div>
-          <ClipboardCheck className="h-10 w-10 text-blue-300/70" />
+          <ClipboardCheck className="hidden h-8 w-8 text-slate-300 dark:text-slate-600 sm:block" />
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <div className="grid grid-cols-2 divide-slate-100 sm:grid-cols-5 sm:divide-x dark:divide-slate-800">
           {[
             { k: "open", label: "Open", v: summary?.open ?? 0 },
             { k: "assigned", label: "Assigned", v: summary?.assigned ?? 0 },
             { k: "in_progress", label: "In progress", v: summary?.in_progress ?? 0 },
-            { k: "done", label: "Done", v: summary?.done ?? 0 },
+            { k: "done", label: "Approved", v: summary?.done ?? 0 },
             { k: "mine", label: "My queue", v: summary?.mine ?? 0 },
           ].map((m) => (
-            <div key={m.k} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{m.label}</p>
-              <p className="mt-0.5 text-xl font-bold tabular-nums">{m.v}</p>
+            <div key={m.k} className="px-5 py-4">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">{m.label}</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">{m.v}</p>
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {([
           ["open", "Needs action"],
           ["mine", "Assigned to me"],
@@ -112,10 +139,10 @@ export function VerificationQueueView() {
             type="button"
             onClick={() => setFilter(key)}
             className={cn(
-              "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+              "rounded-full px-3.5 py-1.5 text-xs font-semibold transition",
               filter === key
-                ? "border-blue-500 bg-blue-50 text-blue-800 dark:border-blue-400/50 dark:bg-blue-500/15 dark:text-blue-200"
-                : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300",
+                ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300",
             )}
           >
             {label}
@@ -123,57 +150,56 @@ export function VerificationQueueView() {
         ))}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
         {isLoading ? (
-          <div className="h-40 animate-pulse bg-slate-100 dark:bg-slate-800" />
+          <div className="h-40 animate-pulse bg-slate-50 dark:bg-slate-800" />
         ) : list.length === 0 ? (
-          <div className="px-5 py-8 text-center">
-            <p className="text-sm text-slate-400">No verification tasks in this view.</p>
+          <div className="px-5 py-12 text-center">
+            <p className="text-sm text-slate-500">Nothing in this queue.</p>
             <button
               type="button"
-              className="mt-3 text-xs font-semibold text-sky-400 hover:underline"
+              className="mt-3 text-xs font-semibold text-slate-700 underline dark:text-slate-300"
               onClick={() => {
                 void refetchSummary();
                 void refetchWorks();
               }}
             >
-              Refresh queue
+              Refresh
             </button>
           </div>
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {list.map((w) => (
-              <li key={w.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-5">
+              <li key={w.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-semibold text-slate-900 dark:text-slate-50">{w.title}</p>
+                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">{w.title}</p>
                     <Badge
                       status={w.status === "done" ? "approved" : w.status === "rejected" ? "rejected" : "pending"}
-                      label={w.status_display || w.status}
+                      label={w.status === "done" ? "Approved" : w.status_display || w.status}
                     />
-                    {w.priority !== "normal" && (
-                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700 dark:bg-amber-500/15 dark:text-amber-200">
-                        {w.priority}
-                      </span>
-                    )}
                   </div>
-                  <p className="mt-0.5 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-slate-500">
                     {w.lead_name} · {w.project_name || "—"}
-                    {w.assigned_to_name ? ` · → ${w.assigned_to_name}` : " · Unassigned"}
-                    {(w.answer_preview || []).length > 0 ? ` · ${w.answer_preview!.length} answers` : ""}
+                    {w.assigned_to_name ? ` · ${w.assigned_to_name}` : " · Unassigned"}
                   </p>
-                  {(w.answer_preview || []).length > 0 && (
-                    <p className="mt-1 truncate text-[11px] text-slate-400">
-                      {w.answer_preview!.slice(0, 2).map((a) => `${a.label}: ${a.value}`).join(" · ")}
-                    </p>
-                  )}
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Link href={`/leads?lead=${w.lead}`} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300">
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  {canDecide(w) && (
+                    <Button
+                      className="h-8 gap-1.5 bg-emerald-600 px-3 text-xs hover:bg-emerald-700"
+                      disabled={act.isPending}
+                      onClick={() => act.mutate({ id: w.id, action: "complete" })}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Approve
+                    </Button>
+                  )}
+                  <Link href={`/leads?lead=${w.lead}`} className="inline-flex h-8 items-center rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
                     Open lead
                   </Link>
-                  <Button variant="outline" className="h-8 text-xs" onClick={() => setSelected(w)}>
-                    Actions
+                  <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => openReview(w)}>
+                    Review
                   </Button>
                 </div>
               </li>
@@ -183,94 +209,108 @@ export function VerificationQueueView() {
       </div>
 
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">{selected.title}</h3>
-            <p className="mt-1 text-sm text-slate-500">{selected.lead_name} · {selected.status_display}</p>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-3 sm:items-center" onClick={() => setSelected(null)}>
+          <div
+            className="flex max-h-[92vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{selected.title}</h3>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  {selected.lead_name} · {selected.status === "done" ? "Approved" : selected.status_display}
+                </p>
+              </div>
+              <button type="button" onClick={() => setSelected(null)} className="rounded-lg px-2 py-1 text-sm text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                Close
+              </button>
+            </div>
 
-            {(selected.answer_preview || []).length > 0 && (
-              <div className="mt-4 max-h-48 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950/60">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">BDM submitted data</p>
-                {(selected.form_schema || []).length > 0
-                  ? selected.form_schema!.map((f) => {
-                      const raw = selected.answers?.[f.field_id];
-                      const preview = (selected.answer_preview || []).find((a) => a.field_id === f.field_id);
-                      const val =
-                        preview?.value ??
-                        (raw == null || raw === "" ? "—" : typeof raw === "string" ? raw : JSON.stringify(raw));
-                      return (
-                        <div key={f.field_id} className="flex items-start justify-between gap-2 text-xs">
-                          <span className="shrink-0 font-medium text-slate-600 dark:text-slate-400">{f.label}</span>
-                          <span className="min-w-0 truncate text-right text-slate-900 dark:text-slate-100">{val}</span>
-                        </div>
-                      );
-                    })
-                  : selected.answer_preview!.map((a) => (
-                      <div key={a.field_id} className="flex items-start justify-between gap-2 text-xs">
-                        <span className="shrink-0 font-medium text-slate-600 dark:text-slate-400">{a.label}</span>
-                        <span className="min-w-0 truncate text-right text-slate-900 dark:text-slate-100">{a.value}</span>
+            <div className="space-y-4 overflow-y-auto px-5 py-4">
+              {previewRows(selected).length > 0 && (
+                <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                  <p className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-950/50">
+                    Submitted data
+                  </p>
+                  <dl className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {previewRows(selected).map((row) => (
+                      <div key={row.key} className="grid grid-cols-[minmax(0,42%)_1fr] gap-3 px-3 py-2 text-sm">
+                        <dt className="text-slate-500">{row.label}</dt>
+                        <dd className="truncate text-right font-medium text-slate-900 dark:text-slate-100">{row.value}</dd>
                       </div>
                     ))}
-              </div>
-            )}
+                  </dl>
+                </div>
+              )}
 
-            {canAssign && ["open", "reopened", "assigned"].includes(selected.status) && (
-              <div className="mt-4 space-y-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Assign office employee</p>
-                <select
-                  value={assigneeId}
-                  onChange={(e) => setAssigneeId(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-950"
-                >
-                  <option value="">Select Ops / team member…</option>
-                  {assigneeOptions.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.first_name || u.username} ({u.role})
-                    </option>
-                  ))}
-                </select>
-                <Input placeholder="Assign notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-                <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                  <input type="checkbox" checked={allowEdit} onChange={(e) => setAllowEdit(e.target.checked)} />
-                  Allow assignee to edit form answers
-                </label>
-                <Button className="w-full gap-2" disabled={!assigneeId || assign.isPending} onClick={() => assign.mutate()}>
-                  <UserPlus className="h-4 w-4" />
-                  {assign.isPending ? "Assigning…" : "Assign now"}
-                </Button>
-              </div>
-            )}
+              {canAssign && ["open", "reopened", "assigned"].includes(selected.status) && (
+                <div className="space-y-2.5 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Assign</p>
+                  <select
+                    value={assigneeId}
+                    onChange={(e) => setAssigneeId(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm dark:border-slate-600 dark:bg-slate-950"
+                  >
+                    <option value="">Select Ops / team member…</option>
+                    {assigneeOptions.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.first_name || u.username} ({u.role})
+                      </option>
+                    ))}
+                  </select>
+                  <Input placeholder="Note for assignee" value={assignNotes} onChange={(e) => setAssignNotes(e.target.value)} />
+                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                    <input type="checkbox" checked={allowEdit} onChange={(e) => setAllowEdit(e.target.checked)} />
+                    Allow assignee to edit answers
+                  </label>
+                  <Button className="w-full gap-2" disabled={!assigneeId || assign.isPending} onClick={() => assign.mutate()}>
+                    <UserPlus className="h-4 w-4" />
+                    {assign.isPending ? "Assigning…" : "Assign"}
+                  </Button>
+                </div>
+              )}
 
-            <div className="mt-4 space-y-2">
-              <Input placeholder="Completion / reject notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-              <div className="flex flex-wrap gap-2">
-                {selected.assigned_to && selected.status === "assigned" && (
-                  <Button className="gap-1.5" onClick={() => act.mutate({ id: selected.id, action: "start" })}>
-                    <Play className="h-4 w-4" /> Start
-                  </Button>
-                )}
-                {["assigned", "in_progress", "reopened"].includes(selected.status) && (
-                  <Button className="gap-1.5 bg-emerald-600 hover:bg-emerald-700" onClick={() => act.mutate({ id: selected.id, action: "complete" })}>
-                    <CheckCircle2 className="h-4 w-4" /> Complete & approve
-                  </Button>
-                )}
-                {selected.status !== "rejected" && selected.status !== "done" && (
-                  <Button variant="danger" className="gap-1.5" onClick={() => act.mutate({ id: selected.id, action: "reject" })}>
-                    <XCircle className="h-4 w-4" /> Reject
-                  </Button>
-                )}
-                {canAssign && ["done", "rejected"].includes(selected.status) && (
-                  <Button variant="outline" className="gap-1.5" onClick={() => act.mutate({ id: selected.id, action: "reopen" })}>
-                    <RotateCcw className="h-4 w-4" /> Reopen
-                  </Button>
-                )}
-                <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
-              </div>
+              {selected.status !== "done" && selected.status !== "rejected" && (
+                <Input
+                  placeholder="Note (optional)"
+                  value={decisionNotes}
+                  onChange={(e) => setDecisionNotes(e.target.value)}
+                />
+              )}
               {(assign.isError || act.isError) && (
                 <p className="text-sm text-rose-600">
                   {(assign.error as Error)?.message || (act.error as Error)?.message || "Action failed"}
                 </p>
               )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 px-5 py-4 dark:border-slate-800">
+              {canDecide(selected) && (
+                <Button
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={act.isPending}
+                  onClick={() => act.mutate({ id: selected.id, action: "complete" })}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {act.isPending ? "Saving…" : "Approve"}
+                </Button>
+              )}
+              {selected.assigned_to && selected.status === "assigned" && (
+                <Button variant="outline" className="gap-1.5" onClick={() => act.mutate({ id: selected.id, action: "start" })}>
+                  <Play className="h-4 w-4" /> Start
+                </Button>
+              )}
+              {selected.status !== "rejected" && selected.status !== "done" && (
+                <Button variant="danger" className="gap-1.5" disabled={act.isPending} onClick={() => act.mutate({ id: selected.id, action: "reject" })}>
+                  <XCircle className="h-4 w-4" /> Reject
+                </Button>
+              )}
+              {canAssign && ["done", "rejected"].includes(selected.status) && (
+                <Button variant="outline" className="gap-1.5" onClick={() => act.mutate({ id: selected.id, action: "reopen" })}>
+                  <RotateCcw className="h-4 w-4" /> Reopen
+                </Button>
+              )}
+              <Button variant="ghost" className="ml-auto" onClick={() => setSelected(null)}>Close</Button>
             </div>
           </div>
         </div>
