@@ -181,6 +181,7 @@ export function VerificationQueueView() {
                   </div>
                   <p className="mt-1 text-xs text-slate-500">
                     {w.lead_name} · {w.project_name || "—"}
+                    {(w.submitted_by_name || w.bdm_name) ? ` · BDM ${w.submitted_by_name || w.bdm_name}` : ""}
                     {w.assigned_to_name ? ` · ${w.assigned_to_name}` : " · Unassigned"}
                   </p>
                 </div>
@@ -218,7 +219,12 @@ export function VerificationQueueView() {
               <div>
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{selected.title}</h3>
                 <p className="mt-0.5 text-sm text-slate-500">
-                  {selected.lead_name} · {selected.status === "done" ? "Approved" : selected.status_display}
+                  {selected.lead_name}
+                  {(selected.submitted_by_name || selected.bdm_name)
+                    ? ` · Submitted by ${selected.submitted_by_name || selected.bdm_name}`
+                    : ""}
+                  {" · "}
+                  {selected.status === "done" ? "Approved" : selected.status_display}
                 </p>
               </div>
               <button type="button" onClick={() => setSelected(null)} className="rounded-lg px-2 py-1 text-sm text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">

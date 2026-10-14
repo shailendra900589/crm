@@ -86,6 +86,7 @@ def verification_works_for_user(user):
         "assigned_by",
         "document",
         "form_submission",
+        "form_submission__submitted_by",
     )
     if is_superadmin(user):
         return qs

@@ -907,6 +907,8 @@ class OrganizationWriteSerializer(serializers.ModelSerializer):
 class VerificationWorkSerializer(serializers.ModelSerializer):
     lead_name = serializers.CharField(source="lead.merchant.name", read_only=True)
     project_name = serializers.CharField(source="lead.project.name", read_only=True)
+    bdm_name = serializers.SerializerMethodField()
+    submitted_by_name = serializers.SerializerMethodField()
     assigned_to_name = serializers.SerializerMethodField()
     assigned_by_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source="get_status_display", read_only=True)
@@ -924,6 +926,8 @@ class VerificationWorkSerializer(serializers.ModelSerializer):
             "lead",
             "lead_name",
             "project_name",
+            "bdm_name",
+            "submitted_by_name",
             "merchant_city",
             "form_submission",
             "document",
@@ -981,6 +985,20 @@ class VerificationWorkSerializer(serializers.ModelSerializer):
                 }
             )
         return out
+
+    def _user_label(self, user):
+        if not user:
+            return None
+        return (user.get_full_name() or "").strip() or user.username
+
+    def get_bdm_name(self, obj):
+        lead = getattr(obj, "lead", None)
+        return self._user_label(getattr(lead, "bdm", None)) if lead else None
+
+    def get_submitted_by_name(self, obj):
+        submission = getattr(obj, "form_submission", None)
+        submitter = getattr(submission, "submitted_by", None) if submission else None
+        return self._user_label(submitter) or self.get_bdm_name(obj)
 
     def get_assigned_to_name(self, obj):
         if not obj.assigned_to_id:

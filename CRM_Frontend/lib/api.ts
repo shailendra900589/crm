@@ -1210,6 +1210,8 @@ export type VerificationWork = {
   lead: number;
   lead_name: string;
   project_name?: string;
+  bdm_name?: string | null;
+  submitted_by_name?: string | null;
   merchant_city?: string;
   form_submission?: number | null;
   document?: number | null;
