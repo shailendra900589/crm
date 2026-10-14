@@ -150,6 +150,9 @@ export function canAccessPage(role: AppRole, pageKey: string, allowedPages?: str
     return pageKey === "admin.organizations" || pageKey === "admin.packages" || pageKey === "profile";
   }
   // Company Admin + field roles: Super Admin package / module entitlements via allowed_pages
+  if (role === "Admin" && (pageKey === "leads" || pageKey === "admin.permissions" || pageKey === "profile")) {
+    return true;
+  }
   if (!allowedPages) return false;
   return allowedPages.includes(pageKey);
 }
