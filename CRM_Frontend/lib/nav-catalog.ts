@@ -33,6 +33,7 @@ export type FieldPageKey =
   | "targets"
   | "visits"
   | "team"
+  | "team-manage"
   | "profile";
 
 export type NavEntry = {
@@ -112,6 +113,7 @@ export const FIELD_NAV: NavEntry[] = [
     icon: Users,
     labels: { default: "Teams", Manager: "My Teams", TL: "Squad" },
   },
+  { pageKey: "team-manage", href: "/team-members", icon: UserCog, labels: { default: "Team Members" } },
   { pageKey: "profile", href: "/profile", icon: UserRound, labels: { default: "Profile" } },
 ];
 
@@ -128,6 +130,7 @@ export function hrefToPageKey(pathname: string): string | null {
   if (pathname.startsWith("/admin/permissions")) return "admin.permissions";
   if (pathname.startsWith("/admin/audit")) return "admin.audit";
   if (pathname === "/admin" || pathname.startsWith("/admin/")) return "admin";
+  if (pathname.startsWith("/team-members")) return "team-manage";
   const first = pathname.split("/").filter(Boolean)[0];
   return first || "dashboard";
 }

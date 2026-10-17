@@ -92,6 +92,52 @@ class UserSerializer(serializers.ModelSerializer):
         return obj.reports_to.get_full_name() or obj.reports_to.username
 
 
+def _enforce_team_scope(actor, attrs, instance=None):
+    """Field users managing their own team: limit roles and reporting line to their own chain."""
+    from .models import OrganizationRole
+    from .permissions import is_company_admin, team_assignable_roles
+
+    if is_company_admin(actor):
+        return attrs
+    allowed = team_assignable_roles(actor)
+    if not allowed:
+        raise serializers.ValidationError({"detail": "You do not have permission to manage team members."})
+
+    role = attrs.get("role", instance.role if instance else User.Role.BDM)
+    org_role_id = attrs.get("organization_role")
+    if org_role_id:
+        org_role = OrganizationRole.objects.filter(
+            id=org_role_id, organization_id=actor.organization_id, is_active=True
+        ).first()
+        if org_role:
+            role = org_role.base_role
+    if role not in allowed:
+        raise serializers.ValidationError({"role": f"You can only assign these roles: {', '.join(allowed)}."})
+
+    chain = {actor.id} | get_descendant_ids(actor)
+    if instance is None:
+        attrs["reports_to"] = attrs.get("reports_to") or actor
+    elif "reports_to" in attrs and attrs["reports_to"] is None:
+        raise serializers.ValidationError({"reports_to": "Team members must report to you or someone in your team."})
+    reports_to = attrs.get("reports_to")
+    if reports_to is not None and reports_to.id not in chain:
+        raise serializers.ValidationError({"reports_to": "Team members must report to you or someone in your team."})
+
+    # Platform links and mobile overrides stay with the company Admin.
+    for field in ("hrms_user_id", "crm_pro_mobile_enabled", "organization"):
+        attrs.pop(field, None)
+    return attrs
+
+
+def _check_reporting_cycle(instance, reports_to):
+    if reports_to is None:
+        return
+    if reports_to.id == instance.id or reports_to.id in get_descendant_ids(instance):
+        raise serializers.ValidationError(
+            {"reports_to": "A user cannot report to themselves or to someone in their own team."}
+        )
+
+
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=6)
     assigned_projects = serializers.PrimaryKeyRelatedField(
@@ -131,6 +177,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
         if len(value) > 15:
             raise serializers.ValidationError("Mobile must be 15 characters or fewer.")
         return value
+
+    def validate(self, attrs):
+        return _enforce_team_scope(self.context["request"].user, attrs)
 
     def create(self, validated_data):
         from .models import OrganizationRole
@@ -229,6 +278,12 @@ class UserUpdateSerializer(serializers.ModelSerializer):
                 "Only Super Admin can deactivate a company Admin account."
             )
         return value
+
+    def validate(self, attrs):
+        attrs = _enforce_team_scope(self.context["request"].user, attrs, instance=self.instance)
+        if self.instance is not None and "reports_to" in attrs:
+            _check_reporting_cycle(self.instance, attrs["reports_to"])
+        return attrs
 
     def update(self, instance, validated_data):
         from .models import OrganizationRole

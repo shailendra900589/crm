@@ -15,7 +15,7 @@ from .org_roles import (
     unique_role_slug,
 )
 from .page_access import FIELD_PAGE_CATALOG
-from .permissions import is_company_admin
+from .permissions import can_manage_team_members, is_company_admin, team_assignable_roles
 
 
 class OrganizationRoleViewSet(viewsets.ViewSet):
@@ -39,7 +39,32 @@ class OrganizationRoleViewSet(viewsets.ViewSet):
         except OrganizationRole.DoesNotExist:
             raise ValidationError({"detail": "Role not found."})
 
+    def _team_scope_list(self, request):
+        """Read-only role picker for team managers: only roles they may assign."""
+        user = request.user
+        org = getattr(user, "organization", None)
+        if org is None or not can_manage_team_members(user):
+            raise PermissionDenied("Only company Admin can manage roles.")
+        ensure_org_roles(org)
+        allowed = team_assignable_roles(user)
+        roles = OrganizationRole.objects.filter(
+            organization=org, is_active=True, base_role__in=allowed
+        ).order_by("-is_system", "name")
+        return Response(
+            {
+                "results": [serialize_org_role(r, include_pages=False) for r in roles],
+                "page_catalog": [],
+                "base_roles": [
+                    {"value": c[0], "label": c[1]}
+                    for c in OrganizationRole.BaseRole.choices
+                    if c[0] in allowed
+                ],
+            }
+        )
+
     def list(self, request):
+        if not is_company_admin(request.user):
+            return self._team_scope_list(request)
         org = self._org(request)
         roles = (
             OrganizationRole.objects.filter(organization=org)

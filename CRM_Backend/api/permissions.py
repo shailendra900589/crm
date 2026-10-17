@@ -329,6 +329,42 @@ def user_can_access_project(user, project_id):
     return leads_for_user(user).filter(project_id=project_id).exists()
 
 
+ROLE_RANK = {
+    User.Role.ADMIN: 0,
+    User.Role.MANAGER: 1,
+    User.Role.TL: 2,
+    User.Role.BDM: 3,
+    User.Role.OPS: 3,
+}
+TEAM_MEMBER_ROLES = (User.Role.MANAGER, User.Role.TL, User.Role.BDM, User.Role.OPS)
+
+
+def can_manage_team_members(user):
+    """Company Admin, or a field user whose role has the "Manage team members" permission."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if is_company_admin(user):
+        return True
+    if user.role not in TEAM_MEMBER_ROLES or not getattr(user, "organization_id", None):
+        return False
+    from .page_access import TEAM_MANAGE_PAGE, user_can_access_page
+
+    return user_can_access_page(user, TEAM_MANAGE_PAGE)
+
+
+def team_assignable_roles(actor):
+    """Base roles an actor may give to people they add or edit."""
+    if is_company_admin(actor):
+        return list(TEAM_MEMBER_ROLES)
+    if not can_manage_team_members(actor):
+        return []
+    rank = ROLE_RANK.get(actor.role)
+    if rank is None:
+        return []
+    # Field-level leads (BDM / Ops) may add peers below them; everyone else only lower ranks.
+    return [r for r in TEAM_MEMBER_ROLES if ROLE_RANK[r] > rank or (rank >= 3 and ROLE_RANK[r] >= 3)]
+
+
 def users_for_user(user):
     """Users visible in hierarchy for listing/management. SuperAdmin accounts are never listed."""
     base = User.objects.exclude(role=User.Role.SUPERADMIN)
@@ -340,10 +376,7 @@ def users_for_user(user):
         if user.organization_id:
             qs = qs.filter(organization_id=user.organization_id)
         return qs
-    if user.role == User.Role.MANAGER:
-        descendants = get_descendant_ids(user)
-        return base.filter(Q(id=user.id) | Q(id__in=descendants))
-    if user.role == User.Role.TL:
+    if user.role in (User.Role.MANAGER, User.Role.TL) or can_manage_team_members(user):
         descendants = get_descendant_ids(user)
         return base.filter(Q(id=user.id) | Q(id__in=descendants))
     return base.filter(id=user.id)
@@ -358,9 +391,13 @@ def can_manage_user(actor, target):
         if actor.organization_id and target.organization_id != actor.organization_id:
             return False
         return True
-    if actor.role == User.Role.MANAGER:
-        return target.id in get_descendant_ids(actor) or target.reports_to_id == actor.id
-    return False
+    if target.id == actor.id or target.role == User.Role.ADMIN:
+        return False
+    if not can_manage_team_members(actor):
+        return False
+    if target.organization_id != actor.organization_id:
+        return False
+    return target.id in get_descendant_ids(actor)
 
 
 def can_deactivate_user(actor, target):
@@ -384,7 +421,7 @@ def can_deactivate_user(actor, target):
         if target.id == actor.id:
             return False
         return True
-    return False
+    return can_manage_user(actor, target)
 
 
 def teams_for_user(user):
@@ -401,6 +438,8 @@ def teams_for_user(user):
         qs = Team.objects.filter(manager=user)
     elif user.role == User.Role.TL:
         qs = Team.objects.filter(Q(manager=user) | Q(members=user)).distinct()
+    elif can_manage_team_members(user):
+        qs = Team.objects.filter(manager=user)
     else:
         return Team.objects.none()
     oid = tenant_org_id(user)
@@ -410,7 +449,7 @@ def teams_for_user(user):
 
 
 def can_manage_team(user):
-    return user.role in (User.Role.ADMIN, User.Role.MANAGER, User.Role.TL)
+    return user.role in (User.Role.ADMIN, User.Role.MANAGER, User.Role.TL) or can_manage_team_members(user)
 
 
 def can_assign_visits(user):

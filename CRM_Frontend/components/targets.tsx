@@ -16,7 +16,8 @@ export function TargetsPage() {
   const qc = useQueryClient();
   const now = new Date();
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me });
-  const canManage = !!me && ["Admin", "Manager", "TL"].includes(me.role);
+  const canManage =
+    !!me && (["Admin", "Manager", "TL"].includes(me.role) || !!me.allowed_pages?.includes("team-manage"));
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [projectId, setProjectId] = useState(() => getProjectId() || "");

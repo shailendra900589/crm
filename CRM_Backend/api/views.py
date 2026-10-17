@@ -22,6 +22,7 @@ from .permissions import (
     can_assign_visits,
     can_deactivate_user,
     can_manage_team,
+    can_manage_team_members,
     can_manage_user,
     can_reassign_leads,
     can_reassign_to,
@@ -1385,7 +1386,7 @@ class SalesTargetViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
-        if user.role == User.Role.BDM:
+        if user.role == User.Role.BDM and not can_manage_team_members(user):
             qs = qs.filter(user=user)
         else:
             visible = users_for_user(user).values_list("id", flat=True)
@@ -1407,27 +1408,34 @@ class SalesTargetViewSet(viewsets.ModelViewSet):
         return qs.order_by("-year", "-month", "user__first_name")
 
     def _can_manage(self):
-        return self.request.user.role in (User.Role.ADMIN, User.Role.MANAGER, User.Role.TL)
+        user = self.request.user
+        return user.role in (User.Role.ADMIN, User.Role.MANAGER, User.Role.TL) or can_manage_team_members(user)
+
+    def _check_target_user(self, target_user):
+        actor = self.request.user
+        if is_company_admin(actor):
+            if actor.organization_id and target_user.organization_id != actor.organization_id:
+                raise PermissionDenied("Cannot set target for this user.")
+            return
+        if target_user.id not in ({actor.id} | get_descendant_ids(actor)):
+            raise PermissionDenied("Cannot set target for this user.")
 
     def perform_create(self, serializer):
         if not self._can_manage():
-            raise PermissionDenied("Only Admin, Manager or TL can set targets.")
-        target_user = serializer.validated_data["user"]
-        actor = self.request.user
-        if actor.role != User.Role.ADMIN:
-            allowed = {actor.id} | get_descendant_ids(actor)
-            if target_user.id not in allowed:
-                raise PermissionDenied("Cannot set target for this user.")
-        serializer.save(created_by=actor)
+            raise PermissionDenied("You do not have permission to set targets.")
+        self._check_target_user(serializer.validated_data["user"])
+        serializer.save(created_by=self.request.user)
 
     def perform_update(self, serializer):
         if not self._can_manage():
-            raise PermissionDenied("Only Admin, Manager or TL can edit targets.")
+            raise PermissionDenied("You do not have permission to edit targets.")
+        if "user" in serializer.validated_data:
+            self._check_target_user(serializer.validated_data["user"])
         serializer.save()
 
     def perform_destroy(self, instance):
         if not self._can_manage():
-            raise PermissionDenied("Only Admin, Manager or TL can delete targets.")
+            raise PermissionDenied("You do not have permission to delete targets.")
         instance.delete()
 
     def list(self, request, *args, **kwargs):
@@ -2398,20 +2406,21 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
 
     def perform_create(self, serializer):
-        if not is_company_admin(self.request.user):
-            raise PermissionDenied("Only company Admin can create users.")
+        actor = self.request.user
         user = serializer.save()
         from .audit import log_audit
         log_audit(
-            self.request.user,
+            actor,
             action="user.created",
             entity_type="User",
             entity_id=user.id,
-            message=f"Admin created user {user.username} ({user.role})",
-            meta={"role": user.role},
+            message=f"{actor.username} created user {user.username} ({user.role})",
+            meta={"role": user.role, "reports_to": user.reports_to_id},
         )
 
     def create(self, request, *args, **kwargs):
+        if not can_manage_team_members(request.user):
+            raise PermissionDenied("You do not have permission to add team members.")
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -2452,9 +2461,9 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(UserSerializer(instance).data)
 
     def perform_update(self, serializer):
-        if not is_company_admin(self.request.user):
-            raise PermissionDenied("Only company Admin can edit users.")
         instance = serializer.instance
+        if not can_manage_user(self.request.user, instance):
+            raise PermissionDenied("You can only edit members of your own team.")
         if instance and instance.role == User.Role.ADMIN and not is_superadmin(self.request.user):
             # Force-keep Admin active + Admin role even if client tampers
             serializer.validated_data.pop("is_active_user", None)

@@ -17,15 +17,27 @@ FIELD_PAGE_CATALOG = [
     {"page_key": "targets", "label": "Targets", "href": "/targets", "description": "Sales targets"},
     {"page_key": "visits", "label": "Visits", "href": "/visits", "description": "Visit calendar"},
     {"page_key": "team", "label": "Teams", "href": "/team", "description": "Team roster and reporting"},
+    {
+        "page_key": "team-manage",
+        "label": "Manage team members",
+        "href": "/team-members",
+        "description": "Add, edit and deactivate own team members, and set their targets",
+    },
     {"page_key": "profile", "label": "Profile", "href": "/profile", "description": "Own profile (always on)", "locked": True},
 ]
 
 FIELD_PAGE_KEYS = [p["page_key"] for p in FIELD_PAGE_CATALOG]
 LOCKED_PAGE_KEYS = {p["page_key"] for p in FIELD_PAGE_CATALOG if p.get("locked")}
 
+TEAM_MANAGE_PAGE = "team-manage"
+
+# Pages without their own package module inherit entitlement from another module.
+PAGE_MODULE_OVERRIDES = {TEAM_MANAGE_PAGE: "admin.users"}
+
 DEFAULT_ROLE_PAGES = {
-    User.Role.MANAGER: {k: True for k in FIELD_PAGE_KEYS},
-    User.Role.TL: {k: True for k in FIELD_PAGE_KEYS},
+    # Team management is granted explicitly by the company Admin, never by default.
+    User.Role.MANAGER: {k: k != TEAM_MANAGE_PAGE for k in FIELD_PAGE_KEYS},
+    User.Role.TL: {k: k != TEAM_MANAGE_PAGE for k in FIELD_PAGE_KEYS},
     User.Role.OPS: {
         "dashboard": True,
         "verification": True,
@@ -38,6 +50,7 @@ DEFAULT_ROLE_PAGES = {
         "targets": False,
         "visits": False,
         "team": False,
+        "team-manage": False,
         "profile": True,
     },
     User.Role.BDM: {
@@ -52,6 +65,7 @@ DEFAULT_ROLE_PAGES = {
         "targets": True,
         "visits": True,
         "team": False,
+        "team-manage": False,
         "profile": True,
     },
 }
@@ -95,6 +109,10 @@ def _org_module_set(user):
     return set(org_enabled_modules(org))
 
 
+def _page_entitled(page_key, org_modules):
+    return PAGE_MODULE_OVERRIDES.get(page_key, page_key) in org_modules
+
+
 def allowed_pages_for_user(user):
     if not user or not getattr(user, "is_authenticated", False):
         return []
@@ -123,7 +141,7 @@ def allowed_pages_for_user(user):
                 or org.roles.filter(is_active=True, base_role=user.role).first()
             )
         if org_role is not None:
-            enabled = [k for k in pages_for_org_role(org_role) if k in org_modules]
+            enabled = [k for k in pages_for_org_role(org_role) if _page_entitled(k, org_modules)]
             if "profile" not in enabled:
                 enabled.append("profile")
             return enabled
@@ -134,7 +152,7 @@ def allowed_pages_for_user(user):
     enabled = list(
         RolePagePermission.objects.filter(role=user.role, enabled=True).values_list("page_key", flat=True)
     )
-    enabled = [k for k in enabled if k in org_modules]
+    enabled = [k for k in enabled if _page_entitled(k, org_modules)]
     if "profile" not in enabled:
         enabled.append("profile")
     return enabled

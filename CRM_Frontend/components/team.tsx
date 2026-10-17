@@ -23,14 +23,15 @@ export function TeamView() {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me });
   const { data: teams, isLoading } = useQuery({ queryKey: ["teams"], queryFn: api.teams });
   const { data: projects } = useQuery({ queryKey: ["projects"], queryFn: api.projects });
+  const canManage =
+    !!me && (["Admin", "Manager", "TL"].includes(me.role) || !!me.allowed_pages?.includes("team-manage"));
   const { data: allUsers } = useQuery({
     queryKey: ["users"],
     queryFn: () => api.users(),
-    enabled: !!me && ["Admin", "Manager", "TL"].includes(me.role),
+    enabled: canManage,
   });
 
   const isAdmin = me?.role === "Admin";
-  const canManage = me && ["Admin", "Manager", "TL"].includes(me.role);
 
   const [form, setForm] = useState({ name: "", project: "", manager: "" });
   const [reportId, setReportId] = useState<number | null>(null);

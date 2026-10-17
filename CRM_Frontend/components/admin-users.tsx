@@ -4,10 +4,21 @@ import { Badge, Button, Card, Input } from "@/components/ui";
 import { api, type CreateUserData, type CrmUser, type OrgRole, type UpdateUserData } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Search, Shield, UserCog, UserPlus, Users } from "lucide-react";
+import { Crosshair, Pencil, Plus, Search, Shield, UserCog, UserPlus, Users } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 const ROLES: CrmUser["role"][] = ["Admin", "Manager", "TL", "BDM", "Ops"];
+const ROLE_RANK: Record<string, number> = { Admin: 0, Manager: 1, TL: 2, BDM: 3, Ops: 3 };
+
+/** Base roles a team manager may assign — mirrors permissions.team_assignable_roles. */
+function teamAssignableRoles(actorRole?: string): CrmUser["role"][] {
+  const rank = actorRole ? ROLE_RANK[actorRole] : undefined;
+  if (rank == null) return [];
+  return (["Manager", "TL", "BDM", "Ops"] as CrmUser["role"][]).filter(
+    (r) => ROLE_RANK[r] > rank || (rank >= 3 && ROLE_RANK[r] >= 3),
+  );
+}
 
 const emptyCreate = (): CreateUserData => ({
   username: "",
@@ -47,8 +58,10 @@ function roleSelectValue(
   if (match) return `role:${match.id}`;
   return `base:${role || "BDM"}`;
 }
-export function AdminUsersPage() {
+export function AdminUsersPage({ scope = "org" }: { scope?: "org" | "team" }) {
+  const isTeam = scope === "team";
   const qc = useQueryClient();
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me });
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
@@ -78,14 +91,24 @@ export function AdminUsersPage() {
     return list.filter((r) => r && r.is_active !== false);
   }, [rolesPayload]);
 
-  // Super Admin must never appear in company Users UI
+  // Super Admin must never appear in company Users UI; team mode lists only people below "me".
   const orgUsers = useMemo(
-    () => users.filter((u) => u.role !== "SuperAdmin"),
-    [users],
+    () => users.filter((u) => u.role !== "SuperAdmin" && (!isTeam || u.id !== me?.id)),
+    [users, isTeam, me?.id],
+  );
+
+  const assignableRoles = useMemo(
+    () => (isTeam ? teamAssignableRoles(me?.role) : ROLES.filter((r) => r !== "Admin")),
+    [isTeam, me?.role],
   );
 
   /** Who can appear in Reports To: hierarchy supervisors + anyone with a custom org role. */
   const reportToCandidates = useMemo(() => {
+    if (isTeam) {
+      // Team managers may only place people under themselves or someone already in their team.
+      const team = orgUsers.filter((u) => u.is_active_user !== false);
+      return me ? [me, ...team] : team;
+    }
     const supervisorBases = new Set(["Admin", "Manager", "TL"]);
     const rank = (u: CrmUser) => {
       if (u.role === "Admin") return 0;
@@ -114,13 +137,14 @@ export function AdminUsersPage() {
         const bn = `${b.first_name || ""} ${b.username}`.trim().toLowerCase();
         return an.localeCompare(bn);
       });
-  }, [orgUsers, orgRoles]);
+  }, [orgUsers, orgRoles, isTeam, me]);
 
   const reportToLabel = (u: CrmUser) => {
     const name = [u.first_name, u.last_name].filter(Boolean).join(" ").trim() || u.username;
     const roleLabel = u.organization_role_name || u.role;
-    return `${name} (${roleLabel})`;
+    return u.id === me?.id ? `You — ${name} (${roleLabel})` : `${name} (${roleLabel})`;
   };
+  const canSetTargets = !!me?.allowed_pages?.includes("targets");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -186,7 +210,8 @@ export function AdminUsersPage() {
     setCreateForm({
       ...emptyCreate(),
       organization_role: match?.id ?? null,
-      role: (match?.base_role as CrmUser["role"]) || "BDM",
+      role: (match?.base_role as CrmUser["role"]) || assignableRoles[0] || "BDM",
+      reports_to: isTeam ? me?.id ?? null : null,
     });
     setError("");
     setModal("create");
@@ -242,16 +267,20 @@ export function AdminUsersPage() {
               <UserCog className="h-5 w-5 text-indigo-600 dark:text-indigo-300" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Company users</h2>
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+                {isTeam ? "My team members" : "Company users"}
+              </h2>
               <p className="mt-1 max-w-xl text-sm text-slate-500 dark:text-slate-400">
-                Manage Admin, Manager, TL, BDM and Ops for your organization. Platform Super Admin is never listed here.
+                {isTeam
+                  ? "Add, update and deactivate people in your reporting line. Everyone you add reports to you or someone in your team."
+                  : "Manage Admin, Manager, TL, BDM and Ops for your organization. Platform Super Admin is never listed here."}
               </p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Stat label="Total" value={stats.total} />
+            <Stat label={isTeam ? "Team size" : "Total"} value={stats.total} />
             <Stat label="Active" value={stats.active} accent="text-emerald-600" />
-            <Stat label="Managers" value={stats.managers} />
+            <Stat label={isTeam ? "TLs" : "Managers"} value={isTeam ? orgUsers.filter((u) => u.role === "TL").length : stats.managers} />
             <Stat label="BDMs" value={stats.bdms} accent="text-indigo-600" />
           </div>
         </div>
@@ -274,13 +303,24 @@ export function AdminUsersPage() {
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
           >
             <option value="">All Roles</option>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            {(isTeam ? assignableRoles : ROLES).map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </div>
-        <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700" onClick={openCreate}>
-          <UserPlus className="h-4 w-4" />
-          Add User
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {isTeam && canSetTargets && (
+            <Link
+              href="/targets"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+            >
+              <Crosshair className="h-4 w-4" />
+              Set targets
+            </Link>
+          )}
+          <Button className="gap-2 bg-indigo-600 hover:bg-indigo-700" onClick={openCreate}>
+            <UserPlus className="h-4 w-4" />
+            {isTeam ? "Add member" : "Add User"}
+          </Button>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -299,7 +339,11 @@ export function AdminUsersPage() {
             {isLoading ? (
               <tr><td colSpan={6} className="px-5 py-8 text-center text-slate-400">Loading...</td></tr>
             ) : !filtered.length ? (
-              <tr><td colSpan={6} className="px-5 py-8 text-center text-slate-400">No users found</td></tr>
+              <tr>
+                <td colSpan={6} className="px-5 py-8 text-center text-slate-400">
+                  {isTeam && !orgUsers.length ? "No one reports to you yet — use Add member to build your team." : "No users found"}
+                </td>
+              </tr>
             ) : filtered.map((u) => (
               <tr key={u.id} className="border-t border-slate-100 hover:bg-slate-50/50">
                 <td className="px-5 py-3">
@@ -356,7 +400,7 @@ export function AdminUsersPage() {
 
       {modal === "create" && (
         <UserModal
-          title="Add User"
+          title={isTeam ? "Add team member" : "Add User"}
           error={error}
           onClose={() => setModal(null)}
           onSave={() => create.mutate()}
@@ -411,14 +455,14 @@ export function AdminUsersPage() {
                   });
                 }}
               >
-                <option value="Admin">Admin</option>
+                {!isTeam && <option value="Admin">Admin</option>}
                 {orgRoles.map((r) => (
                   <option key={r.id} value={`role:${r.id}`}>
                     {r.name} ({r.base_role}){r.is_system ? "" : " · custom"}
                   </option>
                 ))}
                 {!orgRoles.length &&
-                  ROLES.filter((r) => r !== "Admin").map((r) => (
+                  assignableRoles.map((r) => (
                     <option key={r} value={`base:${r}`}>
                       {r}
                     </option>
@@ -435,7 +479,9 @@ export function AdminUsersPage() {
                 <p className="mt-1 text-[11px] text-slate-400">Loading roles…</p>
               ) : (
                 <p className="mt-1 text-[11px] text-slate-400">
-                  Create custom roles under Admin → Roles — they appear here automatically.
+                  {isTeam
+                    ? "Only roles below yours that your Admin allows are listed."
+                    : "Create custom roles under Admin → Roles — they appear here automatically."}
                 </p>
               )}
             </Field>
@@ -445,13 +491,15 @@ export function AdminUsersPage() {
                 value={createForm.reports_to ?? ""}
                 onChange={(e) => setCreateForm({ ...createForm, reports_to: e.target.value ? Number(e.target.value) : null })}
               >
-                <option value="">None</option>
+                {!isTeam && <option value="">None</option>}
                 {reportToCandidates.map((m) => (
                   <option key={m.id} value={m.id}>{reportToLabel(m)}</option>
                 ))}
               </select>
               <p className="mt-1 text-[11px] text-slate-400">
-                Admins, Managers, TLs, and users with custom roles appear here.
+                {isTeam
+                  ? "Members report to you or to someone already in your team."
+                  : "Admins, Managers, TLs, and users with custom roles appear here."}
               </p>
             </Field>
           </div>
@@ -520,12 +568,18 @@ export function AdminUsersPage() {
                   });
                 }}
               >
-                <option value="Admin">Admin</option>
+                {(!isTeam || editing?.role === "Admin") && <option value="Admin">Admin</option>}
                 {orgRoles.map((r) => (
                   <option key={r.id} value={`role:${r.id}`}>
                     {r.name} ({r.base_role}){r.is_system ? "" : " · custom"}
                   </option>
                 ))}
+                {!orgRoles.length &&
+                  assignableRoles.map((r) => (
+                    <option key={r} value={`base:${r}`}>
+                      {r}
+                    </option>
+                  ))}
               </select>
               {editing?.role === "Admin" ? (
                 <p className="mt-1 text-[11px] text-slate-400">Admin role can only be changed by Super Admin.</p>
@@ -537,7 +591,9 @@ export function AdminUsersPage() {
                   </button>
                 </p>
               ) : (
-                <p className="mt-1 text-[11px] text-slate-400">Custom roles are managed under Admin → Roles.</p>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {isTeam ? "Only roles below yours that your Admin allows are listed." : "Custom roles are managed under Admin → Roles."}
+                </p>
               )}
             </Field>
             <Field label="Reports To">
@@ -546,13 +602,15 @@ export function AdminUsersPage() {
                 value={editForm.reports_to ?? ""}
                 onChange={(e) => setEditForm({ ...editForm, reports_to: e.target.value ? Number(e.target.value) : null })}
               >
-                <option value="">None</option>
+                {!isTeam && <option value="">None</option>}
                 {reportToCandidates.filter((m) => m.id !== editing.id).map((m) => (
                   <option key={m.id} value={m.id}>{reportToLabel(m)}</option>
                 ))}
               </select>
               <p className="mt-1 text-[11px] text-slate-400">
-                Admins, Managers, TLs, and users with custom roles appear here.
+                {isTeam
+                  ? "Members report to you or to someone already in your team."
+                  : "Admins, Managers, TLs, and users with custom roles appear here."}
               </p>
             </Field>
             <Field label="New Password (optional)">
