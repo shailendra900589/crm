@@ -1,6 +1,6 @@
-import type { FormField, FormOptionFlow, FormOptionRule } from "@/lib/api";
-import { isOptionField } from "@/lib/form-fields";
-import { isInputField, isStepBreak } from "@/lib/form-steps";
+import type { FormField, FormOptionCapture, FormOptionFlow, FormOptionRule } from "@/lib/api";
+import { isOptionField, optionCaptureKey } from "@/lib/form-fields";
+import { isInputField, isStepBreak, validateStepValues } from "@/lib/form-steps";
 
 export const OPTION_FLOW_LABELS: Record<FormOptionFlow, string> = {
   continue: "Continue normally",
@@ -24,9 +24,15 @@ export function upsertOptionRule(
     ...(idx >= 0 ? rules[idx] : {}),
     ...patch,
   };
+  if (!next.capture) {
+    delete next.capture;
+    delete next.capture_label;
+    delete next.capture_required;
+  }
+  if (next.show_field_ids && !next.show_field_ids.length) delete next.show_field_ids;
   // Drop empty rules
   const empty =
-    (!next.flow || next.flow === "continue") && !(next.show_field_ids && next.show_field_ids.length);
+    (!next.flow || next.flow === "continue") && !next.show_field_ids?.length && !next.capture;
   if (idx >= 0) {
     if (empty) rules.splice(idx, 1);
     else rules[idx] = next;
@@ -62,6 +68,69 @@ function selectedOptionsForField(field: FormField, values: Record<string, unknow
   }
   if (raw === undefined || raw === null || raw === "") return [];
   return [String(raw)];
+}
+
+export type ActiveOptionCapture = {
+  option: string;
+  key: string;
+  kind: FormOptionCapture;
+  label: string;
+  required: boolean;
+};
+
+/** Calendars that should be on screen for the options currently chosen. */
+export function activeOptionCaptures(field: FormField, values: Record<string, unknown>): ActiveOptionCapture[] {
+  if (!isOptionField(field.type)) return [];
+  const selected = new Set(selectedOptionsForField(field, values));
+  const out: ActiveOptionCapture[] = [];
+  for (const rule of field.option_rules || []) {
+    if (!rule.capture || !selected.has(rule.option)) continue;
+    out.push({
+      option: rule.option,
+      key: optionCaptureKey(field.field_id, rule.option),
+      kind: rule.capture,
+      label: rule.capture_label?.trim() || `Date for ${rule.option}`,
+      required: rule.capture_required !== false,
+    });
+  }
+  return out;
+}
+
+/** Write the choice and drop dates for options that are no longer selected. */
+export function withOptionAnswer(
+  field: FormField,
+  values: Record<string, unknown>,
+  nextValue: unknown,
+): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...values, [field.field_id]: nextValue };
+  const selected = new Set(selectedOptionsForField(field, next));
+  for (const rule of field.option_rules || []) {
+    if (!rule.capture || selected.has(rule.option)) continue;
+    delete next[optionCaptureKey(field.field_id, rule.option)];
+  }
+  return next;
+}
+
+export function validateOptionCaptures(fields: FormField[], values: Record<string, unknown>): string[] {
+  const errors: string[] = [];
+  for (const field of fields) {
+    for (const cap of activeOptionCaptures(field, values)) {
+      const raw = values[cap.key];
+      const empty = raw == null || (typeof raw === "string" && !raw.trim());
+      if (cap.required && empty) errors.push(`${cap.label} is required`);
+    }
+  }
+  return errors;
+}
+
+export function validateAnsweredFields(fields: FormField[], values: Record<string, unknown>): string[] {
+  return [...validateStepValues(fields, values), ...validateOptionCaptures(fields, values)];
+}
+
+/** Required questions and option calendars that are currently visible. */
+export function validateVisibleAnswers(schema: FormField[], values: Record<string, unknown>): string[] {
+  const fields = getVisibleFields(schema, values).filter((f) => !isStepBreak(f));
+  return validateAnsweredFields(fields, values);
 }
 
 /** Fields currently visible given answers (hides conditional fields until revealed). */

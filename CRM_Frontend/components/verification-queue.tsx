@@ -2,6 +2,7 @@
 
 import { Badge, Button, Input } from "@/components/ui";
 import { api, type VerificationWork } from "@/lib/api";
+import { parseOptionCaptureKey } from "@/lib/form-fields";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, ClipboardCheck, Play, RotateCcw, UserPlus, XCircle } from "lucide-react";
@@ -87,9 +88,21 @@ export function VerificationQueueView() {
 
   const assigneeOptions = [...(assignees?.ops || []), ...(assignees?.team || [])];
 
+  const captureRows = (w: VerificationWork) => {
+    const rows: { key: string; label: string; value: string }[] = [];
+    for (const [key, raw] of Object.entries(w.answers || {})) {
+      const parsed = parseOptionCaptureKey(key);
+      if (!parsed || raw == null || raw === "") continue;
+      const preview = (w.answer_preview || []).find((a) => a.field_id === key);
+      const text = typeof raw === "string" ? raw.replace("T", " ") : String(raw);
+      rows.push({ key, label: preview?.label || `Date · ${parsed.option}`, value: text });
+    }
+    return rows;
+  };
+
   const previewRows = (w: VerificationWork) => {
     if ((w.form_schema || []).length > 0) {
-      return w.form_schema!.map((f) => {
+      const rows = w.form_schema!.map((f) => {
         const raw = w.answers?.[f.field_id];
         const preview = (w.answer_preview || []).find((a) => a.field_id === f.field_id);
         const val =
@@ -97,6 +110,8 @@ export function VerificationQueueView() {
           (raw == null || raw === "" ? "—" : typeof raw === "string" ? raw : JSON.stringify(raw));
         return { key: f.field_id, label: f.label, value: val };
       });
+      const seen = new Set(rows.map((row) => row.key));
+      return [...rows, ...captureRows(w).filter((row) => !seen.has(row.key))];
     }
     return (w.answer_preview || []).map((a) => ({ key: a.field_id, label: a.label, value: a.value }));
   };

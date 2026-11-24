@@ -655,6 +655,11 @@ def validate_form_answers(schema, answers):
         if fid in conditional_ids and fid not in revealed_ids:
             continue
 
+        if ftype in ("dropdown", "radio", "multiselect"):
+            from .form_sync import validate_option_captures
+
+            errors.extend(validate_option_captures(field, answers))
+
         val = answers.get(fid)
         label = field.get("label", fid)
 

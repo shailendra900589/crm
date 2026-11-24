@@ -75,6 +75,44 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
     return steps;
   }
 
+  void _setFieldValue(FormFieldModel field, dynamic value) {
+    _answers[field.fieldId] = value;
+    if (!field.isChoice) return;
+    final selected = value is List
+        ? value.map((e) => '$e').toSet()
+        : {if (value != null && '$value'.isNotEmpty) '$value'};
+    for (final rule in field.optionRules) {
+      final kind = '${rule['capture'] ?? ''}';
+      if (kind != 'date' && kind != 'datetime') continue;
+      final option = '${rule['option']}';
+      if (selected.contains(option)) continue;
+      _answers.remove(optionCaptureKey(field.fieldId, option));
+    }
+  }
+
+  String? _missingCapture(List<FormFieldModel> fields) {
+    for (final field in fields) {
+      if (!field.isChoice) continue;
+      final value = _answers[field.fieldId];
+      final selected = value is List
+          ? value.map((e) => '$e').toSet()
+          : {if (value != null && '$value'.isNotEmpty) '$value'};
+      for (final rule in field.optionRules) {
+        final kind = '${rule['capture'] ?? ''}';
+        if (kind != 'date' && kind != 'datetime') continue;
+        final option = '${rule['option']}';
+        if (!selected.contains(option)) continue;
+        if (rule['capture_required'] == false) continue;
+        final raw = _answers[optionCaptureKey(field.fieldId, option)];
+        if (raw == null || '$raw'.trim().isEmpty) {
+          final label = '${rule['capture_label'] ?? ''}'.trim();
+          return '${label.isEmpty ? 'Date for $option' : label} is required';
+        }
+      }
+    }
+    return null;
+  }
+
   Set<String> _visibleIds(List<FormFieldModel> schema) {
     final revealed = <String>{};
     for (final f in schema) {
@@ -384,7 +422,9 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
               ...stepFields.map((f) => _FieldTile(
                     field: f,
                     value: _answers[f.fieldId],
-                    onChanged: (v) => setState(() => _answers[f.fieldId] = v),
+                    answers: _answers,
+                    onChanged: (v) => setState(() => _setFieldValue(f, v)),
+                    onCapture: (key, captured) => setState(() => _answers[key] = captured),
                     onUpload: () => _uploadFile(f),
                   )),
               if (_error != null) ...[
@@ -402,12 +442,31 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
                   const Spacer(),
                   if (_step < steps.length - 1)
                     FilledButton(
-                      onPressed: () => setState(() => _step++),
+                      onPressed: () {
+                        final gap = _missingCapture(stepFields);
+                        if (gap != null) {
+                          setState(() => _error = gap);
+                          return;
+                        }
+                        setState(() {
+                          _error = null;
+                          _step++;
+                        });
+                      },
                       child: const Text('Next'),
                     )
                   else
                     FilledButton(
-                      onPressed: _submitting ? null : () => _submit(form),
+                      onPressed: _submitting
+                          ? null
+                          : () {
+                              final gap = _missingCapture(stepFields);
+                              if (gap != null) {
+                                setState(() => _error = gap);
+                                return;
+                              }
+                              _submit(form);
+                            },
                       style: FilledButton.styleFrom(backgroundColor: AppColors.coral),
                       child: Text(_submitting ? 'Submitting…' : 'Submit & Complete'),
                     ),
@@ -421,17 +480,27 @@ class _DynamicFormScreenState extends ConsumerState<DynamicFormScreen> {
   }
 }
 
+const optionCaptureMark = '__date__';
+
+String optionCaptureKey(String fieldId, String option) => '$fieldId$optionCaptureMark$option';
+
+String _pad2(int n) => n.toString().padLeft(2, '0');
+
 class _FieldTile extends StatelessWidget {
   const _FieldTile({
     required this.field,
     required this.value,
+    required this.answers,
     required this.onChanged,
+    required this.onCapture,
     required this.onUpload,
   });
 
   final FormFieldModel field;
   final dynamic value;
+  final Map<String, dynamic> answers;
   final ValueChanged<dynamic> onChanged;
+  final void Function(String key, String value) onCapture;
   final VoidCallback onUpload;
 
   @override
@@ -503,8 +572,62 @@ class _FieldTile extends StatelessWidget {
               ),
               onChanged: onChanged,
             ),
+          ..._capturePickers(context),
         ],
       ),
     );
+  }
+
+  List<Widget> _capturePickers(BuildContext context) {
+    if (!field.isChoice) return const [];
+    final selected = value is List
+        ? value.map((e) => '$e').toSet()
+        : {if (value != null && '$value'.isNotEmpty) '$value'};
+    final tiles = <Widget>[];
+    for (final rule in field.optionRules) {
+      final kind = '${rule['capture'] ?? ''}';
+      if (kind != 'date' && kind != 'datetime') continue;
+      final option = '${rule['option']}';
+      if (!selected.contains(option)) continue;
+      final key = optionCaptureKey(field.fieldId, option);
+      final label = '${rule['capture_label'] ?? ''}'.trim().isEmpty ? 'Choose date' : '${rule['capture_label']}'.trim();
+      final required = rule['capture_required'] != false;
+      final current = answers[key]?.toString() ?? '';
+      tiles.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: OutlinedButton.icon(
+            onPressed: () => _pickCapture(context, key, kind),
+            icon: const Icon(Icons.calendar_month_rounded),
+            label: Text(
+              current.isEmpty ? '$label${required ? ' *' : ''}' : current.replaceFirst('T', ' '),
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      );
+    }
+    return tiles;
+  }
+
+  Future<void> _pickCapture(BuildContext context, String key, String kind) async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(now.year - 2),
+      lastDate: DateTime(now.year + 5),
+    );
+    if (date == null || !context.mounted) return;
+    if (kind == 'datetime') {
+      final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(now));
+      if (time == null) return;
+      onCapture(
+        key,
+        '${date.year}-${_pad2(date.month)}-${_pad2(date.day)}T${_pad2(time.hour)}:${_pad2(time.minute)}',
+      );
+      return;
+    }
+    onCapture(key, '${date.year}-${_pad2(date.month)}-${_pad2(date.day)}');
   }
 }

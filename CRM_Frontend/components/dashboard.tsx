@@ -3,6 +3,7 @@
 import { DashboardFilters, FilterSummaryBanner } from "@/components/dashboard-filters";
 import { DynamicForm, FormLabel, formInputCls, formTextareaCls } from "@/components/dynamic-form";
 import { hasWizardSteps } from "@/lib/form-steps";
+import { validateVisibleAnswers } from "@/lib/form-rules";
 import { SearchableSelect } from "@/components/searchable-select";
 import {
   api,
@@ -298,6 +299,10 @@ export function DashboardView() {
 
   const submitForm = useMutation({
     mutationFn: async () => {
+      if (!hasWizardSteps(fillSchema)) {
+        const errors = validateVisibleAnswers(fillSchema, formData);
+        if (errors.length) throw new Error(errors.join(", "));
+      }
       let leadId = selectedLead;
       if (onboardMode === "fresh") {
         leadId = await ensureFreshLead();
@@ -359,11 +364,16 @@ export function DashboardView() {
   };
 
   const submitVisitModal = useMutation({
-    mutationFn: () =>
-      api.submitForm(activeVisit!.lead, visitModalFormData, {
+    mutationFn: () => {
+      if (!hasWizardSteps(fillSchema)) {
+        const errors = validateVisibleAnswers(fillSchema, visitModalFormData);
+        if (errors.length) throw new Error(errors.join(", "));
+      }
+      return api.submitForm(activeVisit!.lead, visitModalFormData, {
         visit_id: activeVisit!.id,
         remarks: visitModalRemarks,
-      }),
+      });
+    },
     onSuccess: (sub) => {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["leads"] });

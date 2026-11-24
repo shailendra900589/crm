@@ -5,6 +5,7 @@ import { BulkUpload } from "@/components/bulk-upload";
 import { DocumentsPanel } from "@/components/documents-panel";
 import { DynamicForm } from "@/components/dynamic-form";
 import { hasWizardSteps } from "@/lib/form-steps";
+import { validateVisibleAnswers } from "@/lib/form-rules";
 import { LeadActivityTimeline } from "@/components/lead-activity";
 import { api, fileUrl, getProjectId, onProjectChange, LEAD_STATUSES, type CallOutcome, type CreateLeadData, type Lead, type UpdateLeadData } from "@/lib/api";
 import { schemaForFill, valuesForSchema } from "@/lib/form-fields";
@@ -796,7 +797,13 @@ function LeadDetailModal({
   });
 
   const submitForm = useMutation({
-    mutationFn: () => api.submitForm(lead!.id, formData),
+    mutationFn: () => {
+      if (!hasWizardSteps(fillSchema)) {
+        const errors = validateVisibleAnswers(fillSchema, formData);
+        if (errors.length) throw new Error(errors.join(", "));
+      }
+      return api.submitForm(lead!.id, formData);
+    },
     onSuccess: (sub) => {
       qc.invalidateQueries({ queryKey: ["lead", lead?.id] });
       qc.invalidateQueries({ queryKey: ["lead-activity", lead?.id] });

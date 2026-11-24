@@ -117,6 +117,22 @@ export function schemaForFill(schema: FormField[] | undefined | null, enableColl
   return list.filter((f) => f.metric_role !== "collection");
 }
 
+/** Stored beside the choice answer when an option asks for a calendar date. */
+export const OPTION_CAPTURE_MARK = "__date__";
+
+export function optionCaptureKey(fieldId: string, option: string) {
+  return `${fieldId}${OPTION_CAPTURE_MARK}${option}`;
+}
+
+export function parseOptionCaptureKey(key: string): { fieldId: string; option: string } | null {
+  const index = key.indexOf(OPTION_CAPTURE_MARK);
+  if (index <= 0) return null;
+  const fieldId = key.slice(0, index);
+  const option = key.slice(index + OPTION_CAPTURE_MARK.length);
+  if (!fieldId || !option) return null;
+  return { fieldId, option };
+}
+
 /** Drop legacy seed junk (GST4000 / Retail) and keys not in the current form schema. */
 export function valuesForSchema(
   schema: FormField[] | undefined | null,
@@ -126,7 +142,9 @@ export function valuesForSchema(
   const out: Record<string, unknown> = {};
   const data = customData || {};
   for (const [key, value] of Object.entries(data)) {
-    if (ids.size && !ids.has(key)) continue;
+    const capture = parseOptionCaptureKey(key);
+    const knownCapture = !!capture && ids.has(capture.fieldId);
+    if (ids.size && !ids.has(key) && !knownCapture) continue;
     if (isSeedJunkValue(key, value)) continue;
     out[key] = value;
   }

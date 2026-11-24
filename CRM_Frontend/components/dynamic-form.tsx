@@ -13,11 +13,10 @@ import {
   isFullWidthField,
   validateFileSelection,
 } from "@/lib/form-fields";
-import { getVisibleFields, shouldEndFormEarly } from "@/lib/form-rules";
+import { activeOptionCaptures, getVisibleFields, shouldEndFormEarly, validateAnsweredFields, withOptionAnswer } from "@/lib/form-rules";
 import {
   hasWizardSteps,
   splitSchemaIntoSteps,
-  validateStepValues,
 } from "@/lib/form-steps";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -144,7 +143,7 @@ function WizardForm({
   }, [stepIdx, steps.length]);
 
   const goNext = () => {
-    const stepErrors = validateStepValues(stepFields, values);
+    const stepErrors = validateAnsweredFields(stepFields, values);
     if (stepErrors.length) {
       setErrors(stepErrors);
       return;
@@ -243,7 +242,7 @@ function WizardForm({
                 <button
                   type="button"
                   onClick={() => {
-                    const stepErrors = validateStepValues(stepFields, values);
+                    const stepErrors = validateAnsweredFields(stepFields, values);
                     if (stepErrors.length) {
                       setErrors(stepErrors);
                       return;
@@ -309,7 +308,7 @@ function FormFieldsBlock({
           {f.type === "dropdown" ? (
             <SearchableSelect
               value={String(values[f.field_id] || "")}
-              onChange={(val) => set(f.field_id, val)}
+              onChange={(val) => onChange(withOptionAnswer(f, values, val))}
               disabled={readOnly}
               placeholder={getFieldPlaceholder(f) || "Select an option"}
               searchPlaceholder={`Search ${f.label.toLowerCase()}...`}
@@ -332,7 +331,7 @@ function FormFieldsBlock({
                     name={f.field_id}
                     disabled={readOnly}
                     checked={values[f.field_id] === o}
-                    onChange={() => set(f.field_id, o)}
+                    onChange={() => onChange(withOptionAnswer(f, values, o))}
                     className="h-3.5 w-3.5 border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span className="font-medium">{o}</span>
@@ -360,7 +359,7 @@ function FormFieldsBlock({
                       checked={checked}
                       onChange={(e) => {
                         const next = e.target.checked ? [...selected, o] : selected.filter((x) => x !== o);
-                        set(f.field_id, next);
+                        onChange(withOptionAnswer(f, values, next));
                       }}
                       className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     />
@@ -414,6 +413,41 @@ function FormFieldsBlock({
               onChange={(e) => set(f.field_id, e.target.value)}
             />
           )}
+          <OptionCaptureFields field={f} values={values} readOnly={readOnly} onChange={onChange} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OptionCaptureFields({
+  field,
+  values,
+  readOnly,
+  onChange,
+}: {
+  field: FormField;
+  values: Record<string, unknown>;
+  readOnly?: boolean;
+  onChange: (v: Record<string, unknown>) => void;
+}) {
+  const captures = activeOptionCaptures(field, values);
+  if (!captures.length) return null;
+  return (
+    <div className="mt-3 space-y-3">
+      {captures.map((cap) => (
+        <div
+          key={cap.key}
+          className="rounded-lg border border-blue-200 bg-blue-50/70 p-3 dark:border-blue-400/30 dark:bg-blue-500/10"
+        >
+          <FormLabel required={cap.required}>{cap.label}</FormLabel>
+          <Input
+            className={cn(formInputCls, "[color-scheme:light] dark:[color-scheme:dark]")}
+            type={cap.kind === "datetime" ? "datetime-local" : "date"}
+            disabled={readOnly}
+            value={String(values[cap.key] || "")}
+            onChange={(e) => onChange({ ...values, [cap.key]: e.target.value })}
+          />
         </div>
       ))}
     </div>

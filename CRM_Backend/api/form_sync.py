@@ -82,9 +82,12 @@ def _normalize_answers_to_field_ids(answers: dict | None, schema: list) -> dict:
 
     out = {}
     for key, val in answers.items():
+        k = str(key)
+        if parse_option_capture_key(k):
+            out[k] = "" if val in (None, "") else val
+            continue
         if val in (None, ""):
             continue
-        k = str(key)
         if k in by_id:
             out[k] = val
             continue
@@ -94,6 +97,117 @@ def _normalize_answers_to_field_ids(answers: dict | None, schema: list) -> dict:
         else:
             # Keep unknown keys (won't hurt); sync will filter to schema when possible
             out[k] = val
+    return out
+
+
+CAPTURE_MARK = "__date__"
+CAPTURE_KINDS = {"date", "datetime", "time"}
+
+
+def option_capture_key(field_id: str, option: str) -> str:
+    return f"{field_id}{CAPTURE_MARK}{option}"
+
+
+def parse_option_capture_key(key: str):
+    if not isinstance(key, str):
+        return None
+    idx = key.find(CAPTURE_MARK)
+    if idx <= 0:
+        return None
+    field_id = key[:idx]
+    option = key[idx + len(CAPTURE_MARK) :]
+    if not field_id or option == "":
+        return None
+    return field_id, option
+
+
+def selected_options_for_field(field: dict, answers: dict) -> list[str]:
+    fid = field.get("field_id")
+    raw = answers.get(fid) if fid else None
+    if field.get("type") == "multiselect":
+        return [str(x) for x in raw] if isinstance(raw, list) else []
+    if raw is None or raw == "":
+        return []
+    return [str(raw)]
+
+
+def iter_active_captures(field: dict, answers: dict):
+    field_id = field.get("field_id")
+    if not field_id:
+        return
+    selected = set(selected_options_for_field(field, answers))
+    for rule in field.get("option_rules") or []:
+        kind = rule.get("capture") or ""
+        option = rule.get("option")
+        if kind not in CAPTURE_KINDS or option not in selected:
+            continue
+        yield rule, kind, option_capture_key(field_id, option)
+
+
+def capture_answer_label(rule: dict, option: str) -> str:
+    custom = (rule.get("capture_label") or "").strip()
+    return custom or f"Date for {option}"
+
+
+def capture_display_label(schema, key: str) -> str | None:
+    parsed = parse_option_capture_key(key)
+    if not parsed:
+        return None
+    field_id, option = parsed
+    for field in schema or []:
+        if field.get("field_id") != field_id:
+            continue
+        parent = field.get("label") or field_id
+        for rule in field.get("option_rules") or []:
+            if rule.get("option") != option:
+                continue
+            custom = (rule.get("capture_label") or "").strip()
+            return f"{parent} · {custom}" if custom else f"{parent} · {option}"
+        return f"{parent} · {option}"
+    return None
+
+
+def validate_option_captures(field: dict, answers: dict) -> list[str]:
+    from datetime import datetime
+
+    errors = []
+    for rule, kind, key in iter_active_captures(field, answers):
+        raw = answers.get(key)
+        label = capture_answer_label(rule, rule.get("option") or "")
+        empty = raw is None or (isinstance(raw, str) and not str(raw).strip())
+        required = rule.get("capture_required")
+        if required is None:
+            required = True
+        if empty:
+            if required:
+                errors.append(f"{label} is required")
+            continue
+        text = str(raw).strip()
+        try:
+            if kind == "date":
+                datetime.strptime(text, "%Y-%m-%d")
+            elif kind == "time":
+                datetime.strptime(text, "%H:%M")
+            else:
+                datetime.strptime(text[:16], "%Y-%m-%dT%H:%M")
+        except ValueError:
+            errors.append(f"{label} must be a valid date")
+    return errors
+
+
+def prune_inactive_option_captures(schema, answers: dict) -> dict:
+    if not isinstance(answers, dict):
+        return answers
+    out = dict(answers)
+    for field in schema or []:
+        fid = field.get("field_id")
+        if not fid or fid not in out:
+            continue
+        prefix = f"{fid}{CAPTURE_MARK}"
+        active = {key for _rule, _kind, key in iter_active_captures(field, out)}
+        for key in list(out.keys()):
+            if isinstance(key, str) and key.startswith(prefix) and key not in active:
+                out.pop(key, None)
     return out
 
 
@@ -113,6 +227,15 @@ def merge_form_answers(lead: Lead, answers: dict | None, form: CustomForm | None
 
     merged.update(incoming)
 
+    # Keep a schedule date already saved when this submit left that key out.
+    for field in schema:
+        for _rule, _kind, key in iter_active_captures(field, merged):
+            if key in incoming:
+                continue
+            prev = (lead.custom_data or {}).get(key)
+            if prev not in (None, "", [], {}):
+                merged[key] = prev
+
     # Preserve prior file URLs if omitted on re-submit
     for f in schema:
         if f.get("type") == "file" and f.get("field_id"):
@@ -131,13 +254,17 @@ def merge_form_answers(lead: Lead, answers: dict | None, form: CustomForm | None
     # that match schema. Orphan keys outside schema are kept if they look like real fills
     # (helps when Admin recently changed field_ids).
     if schema_ids:
+        active_captures = set()
+        for field in schema:
+            for _rule, _kind, key in iter_active_captures(field, merged):
+                active_captures.add(key)
         cleaned = {}
         for k, v in merged.items():
             if v in (None, "", [], {}):
                 continue
             if is_seed_junk_value(k, v):
                 continue
-            if k in schema_ids:
+            if k in schema_ids or k in active_captures:
                 cleaned[k] = v
             elif isinstance(v, str) and ("/media/" in v or v.startswith("http")):
                 cleaned[k] = v
@@ -145,6 +272,8 @@ def merge_form_answers(lead: Lead, answers: dict | None, form: CustomForm | None
                 # Explicitly submitted — keep even if schema drifted
                 cleaned[k] = v
         merged = cleaned
+    if schema:
+        merged = prune_inactive_option_captures(schema, merged)
     return merged
 
 
@@ -156,6 +285,8 @@ def answer_preview(answers: dict | None, schema: list | None = None, limit: int 
     types = {f.get("field_id"): f.get("type") for f in schema if f.get("field_id")}
     items = []
     for key, val in answers.items():
+        if parse_option_capture_key(key):
+            continue
         if val in (None, "", [], {}):
             continue
         if is_seed_junk_value(key, val):
@@ -174,6 +305,17 @@ def answer_preview(answers: dict | None, schema: list | None = None, limit: int 
         items.append({"field_id": key, "label": label, "value": display})
         if len(items) >= limit:
             break
+    for key, val in answers.items():
+        if val in (None, "", [], {}):
+            continue
+        cap_label = capture_display_label(schema, key)
+        if not cap_label:
+            continue
+        if isinstance(val, str):
+            display = val.replace("T", " ")[:16]
+        else:
+            display = str(val)[:80]
+        items.append({"field_id": key, "label": cap_label, "value": display})
     return items
 
 

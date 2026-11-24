@@ -859,7 +859,7 @@ export type FormFieldType =
   | "phone"
   | "url"
   | "date"
-  | "time"
+  | "time" 
   | "datetime"
   | "dropdown"
   | "radio"
@@ -878,11 +878,18 @@ export type FormMetricRole = "collection" | "pending_amount" | "deal_value";
  */
 export type FormOptionFlow = "continue" | "end" | "next_step";
 
+/** Calendar shown only after this option is chosen (dropdown, radio, or checkboxes). */
+export type FormOptionCapture = "date" | "datetime";
+
 export type FormOptionRule = {
   option: string;
   flow?: FormOptionFlow;
   /** Reveal these fields when this option is selected */
   show_field_ids?: string[];
+  /** Ask the BDM for a date when this option is selected */
+  capture?: FormOptionCapture;
+  capture_label?: string;
+  capture_required?: boolean;
 };
 
 export type FormField = {

@@ -2,7 +2,7 @@
 
 import { DynamicForm } from "@/components/dynamic-form";
 import { Button, Input } from "@/components/ui";
-import { api, getProjectId, setProjectId, type FormField, type FormOptionFlow, type FormOptionRule, type Project } from "@/lib/api";
+import { api, getProjectId, setProjectId, type FormField, type FormOptionCapture, type FormOptionFlow, type FormOptionRule, type Project } from "@/lib/api";
 import {
   defaultField,
   FIELD_TYPE_OPTIONS,
@@ -118,7 +118,7 @@ function OptionsEditor({
       <div>
         <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Options</p>
         <p className="mt-0.5 text-[11px] text-slate-500">
-          Set flow + which fields open when each option is selected
+          For each option set the flow, extra fields, and a calendar date. Works on dropdowns, multiple choice, and checkboxes.
         </p>
       </div>
       {options.map((opt, i) => {
@@ -192,6 +192,69 @@ function OptionsEditor({
                   </div>
                 )}
               </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-2.5">
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-slate-600 bg-slate-950 text-sky-500"
+                  checked={!!rule?.capture}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      patchRule(opt, {
+                        capture: rule?.capture || "date",
+                        capture_label: rule?.capture_label || "Choose date",
+                        capture_required: rule?.capture_required ?? true,
+                      });
+                    } else {
+                      patchRule(opt, { capture: undefined, capture_label: undefined, capture_required: undefined });
+                    }
+                  }}
+                />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-200">
+                    <Calendar className="h-3.5 w-3.5 text-sky-300" />
+                    Show calendar when selected
+                  </span>
+                  <span className="mt-0.5 block text-[10px] text-slate-500">
+                    BDM gets a date picker only after choosing this option.
+                  </span>
+                </span>
+              </label>
+              {rule?.capture && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_140px_auto] sm:items-end">
+                  <div>
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Date label</p>
+                    <Input
+                      value={rule.capture_label || ""}
+                      placeholder="Choose date"
+                      className="h-9 border-slate-700 bg-slate-950 text-xs text-slate-100"
+                      onChange={(e) => patchRule(opt, { capture_label: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">Picker</p>
+                    <select
+                      value={rule.capture}
+                      onChange={(e) => patchRule(opt, { capture: e.target.value as FormOptionCapture })}
+                      className="h-9 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 text-xs font-medium text-slate-200 outline-none focus:border-sky-500/50"
+                    >
+                      <option value="date">Date</option>
+                      <option value="datetime">Date & time</option>
+                    </select>
+                  </div>
+                  <label className="flex h-9 cursor-pointer items-center gap-2 text-[11px] text-slate-300">
+                    <input
+                      type="checkbox"
+                      className="h-3.5 w-3.5 rounded border-slate-600 bg-slate-950 text-sky-500"
+                      checked={rule.capture_required !== false}
+                      onChange={(e) => patchRule(opt, { capture_required: e.target.checked })}
+                    />
+                    Required
+                  </label>
+                </div>
+              )}
             </div>
           </div>
         );
@@ -318,7 +381,7 @@ function FieldCard({
   };
 
   const hasRules = (field.option_rules || []).some(
-    (r) => (r.flow && r.flow !== "continue") || (r.show_field_ids && r.show_field_ids.length),
+    (r) => (r.flow && r.flow !== "continue") || (r.show_field_ids && r.show_field_ids.length) || !!r.capture,
   );
 
   return (
