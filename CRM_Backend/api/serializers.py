@@ -179,6 +179,19 @@ class UserCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        from django.core.exceptions import ValidationError
+        from django.core.validators import validate_email
+
+        email = (attrs.get("email") or "").strip()
+        username = (attrs.get("username") or "").strip()
+        if not email and username:
+            try:
+                validate_email(username)
+            except ValidationError:
+                pass
+            else:
+                email = username
+        attrs["email"] = email
         return _enforce_team_scope(self.context["request"].user, attrs)
 
     def create(self, validated_data):

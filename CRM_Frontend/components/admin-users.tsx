@@ -4,9 +4,9 @@ import { Badge, Button, Card, Input } from "@/components/ui";
 import { api, type CreateUserData, type CrmUser, type OrgRole, type UpdateUserData } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Crosshair, Pencil, Plus, Search, Shield, UserCog, UserPlus, Users } from "lucide-react";
+import { Crosshair, Eye, EyeOff, Mail, Pencil, Plus, Search, Shield, UserCog, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 const ROLES: CrmUser["role"][] = ["Admin", "Manager", "TL", "BDM", "Ops"];
 const ROLE_RANK: Record<string, number> = { Admin: 0, Manager: 1, TL: 2, BDM: 3, Ops: 3 };
@@ -17,6 +17,44 @@ function teamAssignableRoles(actorRole?: string): CrmUser["role"][] {
   if (rank == null) return [];
   return (["Manager", "TL", "BDM", "Ops"] as CrmUser["role"][]).filter(
     (r) => ROLE_RANK[r] > rank || (rank >= 3 && ROLE_RANK[r] >= 3),
+  );
+}
+
+function isEmailAddress(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+function PasswordField({
+  value,
+  onChange,
+  placeholder,
+  autoComplete,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  autoComplete?: string;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        className="pr-11"
+      />
+      <button
+        type="button"
+        aria-label={visible ? "Hide password" : "Show password"}
+        onClick={() => setVisible((v) => !v)}
+        className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+      >
+        {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
   );
 }
 
@@ -69,6 +107,7 @@ export function AdminUsersPage({ scope = "org" }: { scope?: "org" | "team" }) {
   const [createForm, setCreateForm] = useState<CreateUserData>(emptyCreate());
   const [editForm, setEditForm] = useState<UpdateUserData>({});
   const [error, setError] = useState("");
+  const emailEdited = useRef(false);
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ["users", "all"],
@@ -206,6 +245,7 @@ export function AdminUsersPage({ scope = "org" }: { scope?: "org" | "team" }) {
   });
 
   const openCreate = () => {
+    emailEdited.current = false;
     const match = pickOrgRole(orgRoles, "BDM");
     setCreateForm({
       ...emptyCreate(),
@@ -409,10 +449,29 @@ export function AdminUsersPage({ scope = "org" }: { scope?: "org" | "team" }) {
         >
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Username *">
-              <Input value={createForm.username} onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })} />
+              <Input
+                value={createForm.username}
+                placeholder="name or candidate email"
+                autoComplete="off"
+                onChange={(e) => {
+                  const username = e.target.value;
+                  setCreateForm((prev) => {
+                    const next = { ...prev, username };
+                    if (!emailEdited.current) {
+                      next.email = isEmailAddress(username) ? username.trim() : "";
+                    }
+                    return next;
+                  });
+                }}
+              />
             </Field>
             <Field label="Password *">
-              <Input type="password" value={createForm.password} onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })} />
+              <PasswordField
+                value={createForm.password}
+                placeholder="Set a password"
+                autoComplete="new-password"
+                onChange={(password) => setCreateForm((prev) => ({ ...prev, password }))}
+              />
             </Field>
             <Field label="First Name">
               <Input value={createForm.first_name} onChange={(e) => setCreateForm({ ...createForm, first_name: e.target.value })} />
@@ -421,7 +480,23 @@ export function AdminUsersPage({ scope = "org" }: { scope?: "org" | "team" }) {
               <Input value={createForm.last_name} onChange={(e) => setCreateForm({ ...createForm, last_name: e.target.value })} />
             </Field>
             <Field label="Email">
-              <Input value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} />
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  type="email"
+                  value={createForm.email}
+                  placeholder="candidate@company.com"
+                  autoComplete="off"
+                  className="pl-9"
+                  onChange={(e) => {
+                    emailEdited.current = true;
+                    setCreateForm((prev) => ({ ...prev, email: e.target.value }));
+                  }}
+                />
+              </div>
+              {!emailEdited.current && isEmailAddress(createForm.username) && createForm.email ? (
+                <p className="mt-1 text-[11px] text-slate-400">Filled from the username email.</p>
+              ) : null}
             </Field>
             <Field label="Mobile">
               <Input value={createForm.mobile_number} onChange={(e) => setCreateForm({ ...createForm, mobile_number: e.target.value })} />
@@ -614,11 +689,11 @@ export function AdminUsersPage({ scope = "org" }: { scope?: "org" | "team" }) {
               </p>
             </Field>
             <Field label="New Password (optional)">
-              <Input
-                type="password"
+              <PasswordField
                 value={editForm.password || ""}
-                onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
                 placeholder="Leave blank to keep"
+                autoComplete="new-password"
+                onChange={(password) => setEditForm({ ...editForm, password })}
               />
             </Field>
             <Field label="Status">
