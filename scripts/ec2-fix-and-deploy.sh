@@ -64,20 +64,9 @@ echo "=== 5) Start CRM Docker on 127.0.0.1:9080 ==="
 sudo "${DC[@]}" -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 echo "=== 6) Install host nginx vhost for crm.trackbook.co ==="
-# Avoid duplicate map if already defined in another file
-HOST_CONF=deploy/nginx/host-crm.trackbook.co.conf
-sudo cp "$HOST_CONF" /etc/nginx/sites-available/crm.trackbook.co
-sudo ln -sf /etc/nginx/sites-available/crm.trackbook.co /etc/nginx/sites-enabled/crm.trackbook.co
-
-# Remove crm from default / HRMS catch-alls if someone pointed crm there — cannot auto-fix all cases,
-# but ensure our server_name wins for crm.trackbook.co
-if sudo nginx -t; then
-  sudo systemctl reload nginx
-  echo "Host nginx reloaded — crm.trackbook.co → 127.0.0.1:9080"
-else
-  echo "ERROR: nginx -t failed. Fix config; HRMS should still be running."
-  exit 1
-fi
+# Keep the Let's Encrypt :443 block. The HTTP-only file makes Chrome show
+# "Your connection is not private" because :443 then serves another site's cert.
+bash scripts/install-crm-vhost.sh
 
 echo "=== 7) Health checks ==="
 sudo "${DC[@]}" -f docker-compose.prod.yml --env-file .env.prod ps
@@ -86,8 +75,11 @@ echo -n "CRM docker :9080 → "
 curl -sS -o /dev/null -w "%{http_code}" -H "Host: crm.trackbook.co" http://127.0.0.1:9080/api/health/ || true
 echo ""
 echo -n "Host proxy  :80  → "
-curl -sS -o /dev/null -w "%{http_code}" -H "Host: crm.trackbook.co" http://127.0.0.1/api/health/ || true
-echo ""
+code="$(curl -sS -o /dev/null -w "%{http_code}" -H "Host: crm.trackbook.co" http://127.0.0.1/api/health/ || true)"
+echo "$code"
+if [[ "$code" == "301" ]]; then
+  echo "HTTP 301 is expected: port 80 redirects to HTTPS."
+fi
 echo ""
 echo "Done."
 echo "  CRM:  https://crm.trackbook.co"

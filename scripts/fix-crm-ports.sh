@@ -57,8 +57,7 @@ echo "Ports now:"
 sudo docker ps --format "table {{.Names}}\t{{.Ports}}"
 
 echo "Installing host vhost crm.trackbook.co → 127.0.0.1:9080"
-sudo cp deploy/nginx/host-crm.trackbook.co.conf /etc/nginx/sites-available/crm.trackbook.co
-sudo ln -sf /etc/nginx/sites-available/crm.trackbook.co /etc/nginx/sites-enabled/crm.trackbook.co
+bash scripts/install-crm-vhost.sh
 
 # Warn if another site still lists crm.trackbook.co
 if sudo grep -R --include='*' -l 'crm.trackbook.co' /etc/nginx/sites-enabled/ 2>/dev/null | grep -v 'crm.trackbook.co$'; then
